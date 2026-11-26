@@ -1,34 +1,26 @@
-import type { DashboardState } from '../types.js';
+import type { DashboardState, PullRequest } from '../types.js';
 
-export interface Alert { key: string; title: string; message: string }
+// Each kind has its own toast icon in assets/toast/.
+export const ALERT_KINDS = ['needs-human', 'checks-failed', 'ready', 'merged', 'runner-offline', 'runner-online'] as const;
+export type AlertKind = (typeof ALERT_KINDS)[number];
+export interface Alert { key: string; kind: AlertKind; title: string; message: string }
 
 const OFFLINE_POLLS = 2;
 
+// Only GitHub and runner events alert. Claude sessions are shown on the page, never toasted.
 export function createAlertEngine(): { evaluate(next: DashboardState, prev: DashboardState): Alert[] } {
   const streak = new Map<number, number>();
   const alertedOffline = new Set<number>();
-  let baselined = false;
-  let evaluated = false;
-
-  function sessionAlerts(next: DashboardState, prev: DashboardState, out: Alert[]): void {
-    const before = new Map(prev.sessions.map((s) => [s.id, s]));
-    for (const s of next.sessions) {
-      const p = before.get(s.id);
-      if (s.state !== 'waiting') continue;
-      if (p ? p.state === 'waiting' : (!evaluated || s.detail === 'nowa sesja')) continue;
-      out.push({
-        key: `session:${s.id}:waiting:${s.since}`,
-        title: `Czeka: ${s.project}`,
-        message: s.task ? `${s.detail} · ${s.task}` : s.detail,
-      });
-    }
-  }
+  const needingHuman = new Set<string>();
+  const seenMerged = new Set<string>();
+  let runnersBaselined = false;
+  let prsBaselined = false;
 
   function runnerAlerts(next: DashboardState, prev: DashboardState, out: Alert[]): void {
     const stamp = next.collectors.runners.lastSuccessAt;
     if (stamp === null) return;
-    if (!baselined) {
-      baselined = true;
+    if (!runnersBaselined) {
+      runnersBaselined = true;
       for (const r of next.runners) if (r.state === 'offline') alertedOffline.add(r.id);
       return;
     }
@@ -41,12 +33,12 @@ export function createAlertEngine(): { evaluate(next: DashboardState, prev: Dash
         streak.set(r.id, n);
         if (n >= OFFLINE_POLLS && !alertedOffline.has(r.id)) {
           alertedOffline.add(r.id);
-          out.push({ key: `runner:${r.id}:offline`, title: `Runner offline: ${r.name}`, message: r.os });
+          out.push({ key: `runner:${r.id}:offline`, kind: 'runner-offline', title: `Runner offline: ${r.name}`, message: r.os });
         }
       } else {
         streak.set(r.id, 0);
         if (alertedOffline.delete(r.id)) {
-          out.push({ key: `runner:${r.id}:online`, title: `Runner znowu online: ${r.name}`, message: r.os });
+          out.push({ key: `runner:${r.id}:online`, kind: 'runner-online', title: `Runner znowu online: ${r.name}`, message: r.os });
         }
       }
     }
@@ -54,27 +46,43 @@ export function createAlertEngine(): { evaluate(next: DashboardState, prev: Dash
     for (const id of [...alertedOffline]) if (!seen.has(id)) alertedOffline.delete(id);
   }
 
+  function prAlert(kind: AlertKind, what: string, p: Pick<PullRequest, 'id' | 'repo' | 'number' | 'title'>): Alert {
+    return { key: `pr:${p.id}:${kind}`, kind, title: `${what}: ${p.repo} #${p.number}`, message: p.title };
+  }
+
   function prAlerts(next: DashboardState, prev: DashboardState, out: Alert[]): void {
     const before = new Map(prev.prs.map((p) => [p.id, p]));
     for (const p of next.prs) {
       const o = before.get(p.id);
       if (!o) continue;
-      if (p.checks.state === 'fail' && o.checks.state !== 'fail') {
-        out.push({ key: `pr:${p.id}:fail`, title: `Checki nie przeszły: ${p.repo} #${p.number}`, message: p.title });
-      }
-      if (p.merge === 'ready' && o.merge !== 'ready') {
-        out.push({ key: `pr:${p.id}:ready`, title: `Gotowy do merge: ${p.repo} #${p.number}`, message: p.title });
-      }
+      if (p.checks.state === 'fail' && o.checks.state !== 'fail') out.push(prAlert('checks-failed', 'Checki nie przeszły', p));
+      if (p.merge === 'ready' && o.merge !== 'ready') out.push(prAlert('ready', 'Gotowy do merge', p));
+    }
+
+    // What is already there at the first successful poll is old news.
+    if (next.collectors.prs.lastSuccessAt === null) return;
+    const first = !prsBaselined;
+    prsBaselined = true;
+    const need = next.prs.filter((p) => p.needsHuman);
+    for (const p of need) {
+      if (needingHuman.has(p.id)) continue;
+      needingHuman.add(p.id);
+      if (!first) out.push(prAlert('needs-human', 'Wymaga człowieka', p));
+    }
+    const ids = new Set(need.map((p) => p.id));
+    for (const id of [...needingHuman]) if (!ids.has(id)) needingHuman.delete(id);
+    for (const m of next.merged) {
+      if (seenMerged.has(m.id)) continue;
+      seenMerged.add(m.id);
+      if (!first) out.push(prAlert('merged', 'Zmergowany', m));
     }
   }
 
   return {
     evaluate(next, prev) {
       const all: Alert[] = [];
-      sessionAlerts(next, prev, all);
       runnerAlerts(next, prev, all);
       prAlerts(next, prev, all);
-      evaluated = true;
       const seen = new Set<string>();
       return all.filter((a) => !seen.has(a.key) && seen.add(a.key));
     },

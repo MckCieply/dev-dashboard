@@ -2,9 +2,8 @@
 import { ICON } from './icons.js';
 
 const ENT = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-function projectTask(s) {
-  return s.task ? `${esc(s.project)} / ${esc(s.task)}` : esc(s.project);
-}
+// Folder and branch names are not session names, so they never show.
+const sessionName = (s) => esc(s.title || s.task || 'Sesja bez nazwy');
 
 export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ENT[c]);
@@ -30,17 +29,26 @@ function fmtClockSec(ts) {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
-// Icon color class per status key (DESIGN_DIRECTION status map).
+// Color per status key (DESIGN_DIRECTION status map).
 const TONE = {
-  waiting: 'tone-alert', working: 'tone-ink', unknown: 'tone-muted',
-  busy: 'tone-ink', idle: 'tone-muted', offline: 'tone-alert',
-  running: 'tone-ink', queued: 'tone-muted',
-  pass: 'tone-ink', fail: 'tone-alert', pending: 'tone-muted',
+  waiting: 'alert', working: 'info', unknown: 'muted',
+  busy: 'info', idle: 'ok', offline: 'alert',
+  running: 'info', queued: 'warn',
+  human: 'alert',
+  pass: 'ok', fail: 'alert', pending: 'warn', none: 'muted',
 };
+const MERGE_TONE = { ready: 'ok', blocked: 'warn', conflict: 'alert', draft: 'muted', unknown: 'muted' };
+const SPINNING = new Set(['working', 'running']);
 
 function icon(key, size = 16, sw = 2.4) {
-  return `<svg class="ico ${TONE[key]}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="${ICON[key]}"></path></svg>`;
+  const cls = `ico tone-${TONE[key] ?? 'muted'}${SPINNING.has(key) ? ' spin' : ''}`;
+  return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="${ICON[key] ?? ICON.pending}"></path></svg>`;
 }
+
+// data-key keeps a row's DOM node (and its animation) across repaints; data-status drives the change flash.
+const rowAttrs = (cls, tone, key, status) => `class="${cls} st-${tone}" data-key="${esc(key)}" data-status="${esc(status)}"`;
+const tag = (tone, label) => `<span class="tag tone-${tone}">${label}</span>`;
+const count = (tone, n, label) => (n ? `<span class="tone-${tone}">${n} ${label}</span>` : `0 ${label}`);
 
 const SESSION_LABEL = { waiting: '[CZEKA]', working: '[PRACUJE]', unknown: '[NIEZNANY]' };
 const RUNNER_LABEL = { busy: '[ZAJĘTY]', idle: '[WOLNY]', offline: '[OFFLINE]' };
@@ -73,13 +81,21 @@ export function renderHeader(state, now, connected) {
 
 const waitingOf = (state) => state.sessions.filter((s) => s.state === 'waiting').sort((a, b) => a.since - b.since);
 
+const humanOf = (state) => state.prs.filter((p) => p.needsHuman);
+
+export const waitingCount = (state) => waitingOf(state).length + humanOf(state).length;
+
+export const faviconFor = (state) => (waitingCount(state) > 0 ? '/favicon-alert.svg' : '/favicon.svg');
+
 export function renderWaiting(state, now) {
   const list = waitingOf(state);
-  if (list.length === 0) {
+  const total = waitingCount(state);
+  if (total === 0) {
     return `<section class="waiting" aria-labelledby="wait-h"><div class="wait-side"><h2 class="m" id="wait-h">Czeka na Ciebie</h2><div class="wait-count" aria-live="polite">00</div></div><div class="wait-rows"><p class="empty">Nic nie czeka</p></div></section>`;
   }
-  const rows = list.map((s) => `<div class="row row-wait">${icon('waiting')}<div><div class="t">${projectTask(s)}</div><div class="s">&gt; ${esc(s.detail)}</div></div><span class="tag muted">${WHERE_LABEL[s.where] ?? esc(s.where)}</span><span class="since m">${fmtDuration(now - s.since)}</span></div>`).join('');
-  return `<section class="waiting is-alert" aria-labelledby="wait-h"><div class="wait-side"><h2 class="m" id="wait-h">[!] Czeka na Ciebie</h2><div class="wait-count" aria-live="polite">${pad2(list.length)}</div><div class="m wait-max">MAX_WAIT ${esc(fmtDuration(now - list[0].since).toUpperCase())}</div></div><div class="wait-rows">${rows}</div></section>`;
+  const prRows = humanOf(state).map((p) => `<div class="row row-wait" data-key="w:pr:${esc(p.id)}">${icon('human')}<div><div class="t">${prTitle(p)}</div><div class="s">&gt; PR wymaga człowieka</div></div>${tag('alert', '[NEEDS HUMAN]')}<span class="since m"></span></div>`).join('');
+  const rows = prRows + list.map((s) => `<div class="row row-wait" data-key="w:${esc(s.id)}">${icon('waiting')}<div><div class="t">${sessionName(s)}</div><div class="s">&gt; ${esc(s.detail)}</div></div><span class="tag muted">${WHERE_LABEL[s.where] ?? esc(s.where)}</span><span class="since m">${fmtDuration(now - s.since)}</span></div>`).join('');
+  return `<section class="waiting is-alert" aria-labelledby="wait-h"><div class="wait-side"><h2 class="m" id="wait-h">[!] Czeka na Ciebie</h2><div class="wait-count" aria-live="polite">${pad2(total)}</div>${list.length ? `<div class="m wait-max">MAX_WAIT ${esc(fmtDuration(now - list[0].since).toUpperCase())}</div>` : ''}</div><div class="wait-rows">${rows}</div></section>`;
 }
 
 export function renderTiles(state) {
@@ -91,21 +107,33 @@ export function renderTiles(state) {
   const running = cnt(queue, (q) => q.state === 'in_progress');
   const maxWait = queued.length ? Math.max(...queued.map((q) => state.now - q.createdAt)) : 0;
   const failing = cnt(prs, (p) => p.checks.state === 'fail');
+  const human = cnt(prs, (p) => p.needsHuman);
+  const ses = (st) => cnt(sessions, (s) => s.state === st);
+  const run = (st) => cnt(runners, (r) => r.state === st);
   const tile = (name, big, unit, sub) => `<div class="cell tile"><span class="tag muted">${name}</span><span class="big">${big}${unit ? ` <span class="unit">${unit}</span>` : ''}</span><span class="s">${sub}</span></div>`;
   return [
     tile('Sesje', pad2(sessions.length), '',
-      `${cnt(sessions, (s) => s.state === 'working')} PRACUJE · ${cnt(sessions, (s) => s.state === 'waiting')} CZEKA · ${cnt(sessions, (s) => s.state === 'unknown')} NIEZNANY`),
+      `${count('info', ses('working'), 'PRACUJE')} · ${count('alert', ses('waiting'), 'CZEKA')} · ${ses('unknown')} NIEZNANY`),
     tile('Runnery', `${online}/${runners.length}`, 'ONLINE',
-      `${cnt(runners, (r) => r.state === 'busy')} ZAJĘTY · ${cnt(runners, (r) => r.state === 'idle')} WOLNY · ${offline ? `<span class="tone-alert">${offline} OFFLINE</span>` : '0 OFFLINE'}`),
+      `${count('info', run('busy'), 'ZAJĘTY')} · ${count('ok', run('idle'), 'WOLNY')} · ${count('alert', offline, 'OFFLINE')}`),
     tile('Kolejka CI', pad2(queued.length), 'QUEUED',
-      `${running} RUNNING${queued.length ? ` · MAX ${esc(fmtDuration(maxWait).toUpperCase())}` : ''}`),
+      `${count('info', running, 'RUNNING')}${queued.length ? ` · <span class="tone-warn">MAX ${esc(fmtDuration(maxWait).toUpperCase())}</span>` : ''}`),
     tile('Pull requesty', pad2(prs.length), 'OPEN',
-      `${cnt(prs, (p) => p.merge === 'ready')} READY · ${failing ? `<span class="tone-alert">${failing} FAIL</span>` : '0 FAIL'}`),
+      `${human ? `${count('alert', human, 'NEEDS HUMAN')} · ` : ''}${count('ok', cnt(prs, (p) => p.merge === 'ready'), 'READY')} · ${count('alert', failing, 'FAIL')}`),
   ].join('');
 }
 
+function sessionRow(s, now) {
+  // Waiting for CI is waiting on the system, so it looks like a queued run.
+  const pr = s.state === 'working' && s.waitsFor === 'pr';
+  const key = pr ? 'queued' : s.state;
+  const tone = TONE[key] ?? 'muted';
+  const label = pr ? '[CZEKA NA PR]' : SESSION_LABEL[s.state] ?? esc(s.state);
+  return `<div ${rowAttrs('row', tone, `s:${s.id}`, key)}>${icon(key)}<div><div class="t">${sessionName(s)}</div><div class="s">${esc(s.where)} · ${esc(s.detail)} · ${fmtDuration(now - s.since)}</div></div>${tag(tone, label)}</div>`;
+}
+
 export function renderSessions(state, now) {
-  const rows = state.sessions.map((s) => `<div class="row">${icon(s.state)}<div><div class="t">${projectTask(s)}</div><div class="s">${esc(s.where)} · ${esc(s.detail)} · ${fmtDuration(now - s.since)}</div></div><span class="tag">${SESSION_LABEL[s.state] ?? esc(s.state)}</span></div>`).join('');
+  const rows = state.sessions.map((s) => sessionRow(s, now)).join('');
   return panel('ses-h', 'Sesje', 'LOCAL + CLOUD', collectorError(state.collectors.sessions, 'Sesje') + (rows || empty('Brak sesji')), !state.collectors.sessions.ok && rows !== '');
 }
 
@@ -117,7 +145,7 @@ function runnerDetail(r, now) {
 }
 
 export function renderRunners(state, now) {
-  const rows = state.runners.map((r) => `<div class="row">${icon(r.state)}<div><div class="t">${esc(r.name)}</div><div class="s">${esc(r.os)} · ${runnerDetail(r, now)}</div></div><span class="tag">${RUNNER_LABEL[r.state] ?? esc(r.state)}</span></div>`).join('');
+  const rows = state.runners.map((r) => `<div ${rowAttrs('row', TONE[r.state] ?? 'muted', `r:${r.id}`, r.state)}>${icon(r.state)}<div><div class="t">${esc(r.name)}</div><div class="s">${esc(r.os)} · ${runnerDetail(r, now)}</div></div>${tag(TONE[r.state] ?? 'muted', RUNNER_LABEL[r.state] ?? esc(r.state))}</div>`).join('');
   return panel('run-h', 'Runnery', 'ALL INCL. OFFLINE', collectorError(state.collectors.runners, 'Runnery') + (rows || empty('Brak runnerów')), !state.collectors.runners.ok && rows !== '');
 }
 
@@ -127,7 +155,10 @@ function queueDetail(q, now) {
 }
 
 export function renderQueue(state, now) {
-  const rows = state.queue.map((q) => `<div class="row">${icon(RUN_ICON[q.state] ?? 'queued')}<div><div class="t">${esc(q.repo)} / ${esc(q.workflow)} #${esc(q.runNumber)}</div><div class="s">${esc(q.branch)} · ${queueDetail(q, now)}</div></div><span class="tag">${RUN_LABEL[q.state] ?? esc(q.state)}</span></div>`).join('');
+  const rows = state.queue.map((q) => {
+    const key = RUN_ICON[q.state] ?? 'queued';
+    return `<div ${rowAttrs('row', TONE[key], `q:${q.id}`, q.state)}>${icon(key)}<div><div class="t">${esc(q.repo)} / ${esc(q.workflow)} #${esc(q.runNumber)}</div><div class="s">${esc(q.branch)} · ${queueDetail(q, now)}</div></div>${tag(TONE[key], RUN_LABEL[q.state] ?? esc(q.state))}</div>`;
+  }).join('');
   return panel('q-h', 'Kolejka runów', 'ACTIVE REPOS', collectorError(state.collectors.queue, 'Kolejka') + (rows || empty('Kolejka pusta')), !state.collectors.queue.ok && rows !== '');
 }
 
@@ -136,7 +167,7 @@ function checksView(c) {
     case 'pass': return ['pass', `${c.passed} z ${c.total} OK`];
     case 'fail': return ['fail', `${c.failed} z ${c.total} nie przeszło`];
     case 'pending': return ['pending', `w toku, ${c.passed} z ${c.total}`];
-    default: return ['pending', 'brak checków'];
+    default: return ['none', 'brak checków'];
   }
 }
 
@@ -144,21 +175,33 @@ const REVIEW_VIEW = {
   approved: ['pass', 'zatwierdzony'],
   changes_requested: ['fail', 'prośba o zmiany'],
   review_required: ['pending', 'czeka na review'],
-  draft: ['pending', 'draft'],
-  none: ['pending', 'bez review'],
+  draft: ['none', 'draft'],
+  none: ['none', 'bez review'],
 };
 
 // Only http(s) links; anything else renders as plain text.
 const safeUrl = (u) => (/^https?:\/\//i.test(String(u)) ? String(u) : null);
 
+function prTitle(p) {
+  const title = `${esc(p.repo)} #${esc(p.number)} / ${esc(p.title)}`;
+  const href = safeUrl(p.url);
+  return href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${title}</a>` : title;
+}
+
+// Only the label that still asks for a person is red.
+function prLabels(p) {
+  const spans = (p.labels ?? []).map((l) => `<span class="label${p.needsHuman && l.toLowerCase() === 'needs-human' ? ' tone-alert' : ''}">${esc(l)}</span>`).join('');
+  return spans ? `<div class="pr-labels">${spans}</div>` : '';
+}
+
 export function renderPrs(state) {
   const rows = state.prs.map((p) => {
     const [ck, ct] = checksView(p.checks);
     const [rk, rt] = REVIEW_VIEW[p.review] ?? REVIEW_VIEW.none;
-    const title = `${esc(p.repo)} #${esc(p.number)} / ${esc(p.title)}`;
-    const href = safeUrl(p.url);
-    const head = href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${title}</a>` : title;
-    return `<div class="pr"><div class="pr-top"><div class="t">${head}</div><span class="tag">${MERGE_LABEL[p.merge] ?? '[?]'}</span></div><div class="s pr-meta"><span>${icon(ck, 14, 2.6)}${ct}</span><span>${icon(rk, 14, 2.6)}${rt}</span></div></div>`;
+    const mergeTone = MERGE_TONE[p.merge] ?? 'muted';
+    const tags = `${p.needsHuman ? tag('alert', '[NEEDS HUMAN]') : ''}${tag(mergeTone, MERGE_LABEL[p.merge] ?? '[?]')}`;
+    const status = `${p.merge} ${p.checks.state} ${p.review} ${p.needsHuman ? 'human' : ''}`;
+    return `<div ${rowAttrs('pr', p.needsHuman ? 'alert' : mergeTone, `p:${p.id}`, status)}><div class="pr-top"><div class="t">${prTitle(p)}</div><div class="pr-tags">${tags}</div></div>${prLabels(p)}<div class="s pr-meta"><span>${icon(ck, 14, 2.6)}${ct}</span><span>${icon(rk, 14, 2.6)}${rt}</span></div></div>`;
   }).join('');
   return panel('pr-h', 'Pull requesty', 'OPEN', collectorError(state.collectors.prs, 'PR') + (rows || empty('Brak otwartych PR')), !state.collectors.prs.ok && rows !== '');
 }

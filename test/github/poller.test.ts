@@ -132,6 +132,31 @@ describe('GitHubPoller', () => {
     expect(store.get().collectors.prs.ok).toBe(true);
   });
 
+  it('searches every owner, also for inactive repos, and drops repos the user has no access to', async () => {
+    const stale = { ...rawRepo('old/legacy'), pushed_at: new Date(NOW - 90 * 86_400_000).toISOString() };
+    const node = (id: string, repo: string) => ({
+      id, number: 1, title: id, url: 'u', isDraft: false, reviewDecision: null, mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN',
+      labels: { nodes: [{ name: 'needs-human' }] }, repository: { nameWithOwner: repo },
+    });
+    let query = '';
+    const { client } = fake((p) => {
+      if (p.startsWith('/user/repos')) return [stale];
+      if (p.startsWith('graphql:')) {
+        query = p;
+        const nodes = [node('mine', 'old/legacy'), node('foreign', 'old/public-not-mine')];
+        return { s0: { nodes }, m0: { nodes } };
+      }
+      return happy(p);
+    });
+    const { store, poller } = mk(client);
+    await poller.refreshRepos();
+    await poller.pollOnce();
+    expect(query).toContain('user:old');
+    expect(query).toContain(`merged:>=${new Date(NOW - 86_400_000).toISOString().slice(0, 10)}`);
+    expect(store.get().prs.map((p) => [p.id, p.needsHuman])).toEqual([['mine', true]]);
+    expect(store.get().merged.map((p) => p.id)).toEqual(['mine']);
+  });
+
   it('start/stop schedule with timers and stop clears them', async () => {
     vi.useFakeTimers();
     try {

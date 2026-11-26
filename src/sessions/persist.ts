@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Session } from '../types.js';
-import type { Sessions } from './machine.js';
+import { SYSTEM_TAG, type Sessions } from './machine.js';
 
 const STATES = new Set(['waiting', 'working', 'unknown']);
 
@@ -24,7 +24,11 @@ export function loadSessions(file: string): Sessions {
     const v: unknown = JSON.parse(raw);
     if (v && typeof v === 'object' && !Array.isArray(v)) {
       const out: Sessions = {};
-      for (const [k, e] of Object.entries(v as Record<string, unknown>)) if (validSession(e)) out[k] = e;
+      for (const [k, e] of Object.entries(v as Record<string, unknown>)) {
+        if (!validSession(e)) continue;
+        // Older versions saved harness tags as the task name; the next prompt sets a real one.
+        out[k] = typeof e.task === 'string' && SYSTEM_TAG.test(e.task) ? { ...e, task: '' } : e;
+      }
       return out;
     }
     throw new Error('not an object');

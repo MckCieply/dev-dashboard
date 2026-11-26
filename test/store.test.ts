@@ -85,3 +85,30 @@ describe('Store', () => {
     expect(fn).toHaveBeenCalledTimes(4);
   });
 });
+
+describe('session titles', () => {
+  const ev = { session_id: 's1', cwd: '/w/p-1a2b', hook_event_name: 'UserPromptSubmit', prompt: 'x' };
+  it('sets the title with the hook event', () => {
+    const store = new Store({ toasts: false, titleOf: () => 'Ładna nazwa' });
+    store.applyHook(ev);
+    expect(store.get().sessions[0].title).toBe('Ładna nazwa');
+  });
+  it('titles restored sessions and picks up renames with one change', () => {
+    let name: string | null = null;
+    const first = new Store({ toasts: false });
+    first.applyHook(ev);
+    const store = new Store({ toasts: false, sessions: first.getSessions(), titleOf: () => name });
+    let changes = 0;
+    store.onChange(() => { changes++; });
+    store.refreshTitles();
+    expect(changes).toBe(0);
+    name = 'Nowa';
+    store.refreshTitles();
+    store.refreshTitles();
+    expect(changes).toBe(1);
+    expect(store.get().sessions[0].title).toBe('Nowa');
+    name = null;
+    store.refreshTitles();
+    expect(store.get().sessions[0].title).toBe('Nowa');
+  });
+});

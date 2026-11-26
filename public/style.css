@@ -9,6 +9,9 @@
   --alert: #FF2A2A;
   --alert-fill: #E61919;
   --live: #4AF626;
+  --info: #4DA3FF;
+  --warn: #FFB000;
+  --ok: #3DD68C;
   --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
   --sans: Inter, "Segoe UI", system-ui, sans-serif;
 }
@@ -17,9 +20,6 @@ body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var
 .page { max-width: 1360px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
 .m, .t, .s, .tag, .head, .big, .err, .empty, .foot, .meta { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
-.tone-ink { color: var(--ink); }
-.tone-muted { color: var(--ink-muted); }
-.tone-alert { color: var(--alert); }
 .muted { color: var(--ink-muted); }
 
 /* header */
@@ -36,6 +36,14 @@ body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var
 .head small { font-weight: 400; font-size: 11px; color: var(--ink-muted); letter-spacing: 0.6px; text-align: right; }
 .row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 14px; border-top: 1px solid var(--grid-soft); }
 .row:first-of-type { border-top: 0; }
+/* status bar on the left edge */
+.row, .pr { border-left: 3px solid transparent; }
+.st-alert { border-left-color: var(--alert); }
+.st-info { border-left-color: var(--info); }
+.st-warn { border-left-color: var(--warn); }
+.st-ok { border-left-color: var(--ok); }
+.st-muted { border-left-color: var(--grid); }
+.row-wait { border-left: 0; }
 .ico { width: 16px; height: 16px; margin-top: 1px; flex: none; }
 .t { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }
 .t a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--grid); }
@@ -43,10 +51,19 @@ body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var
 .s { font-size: 12px; font-weight: 400; line-height: 1.4; color: var(--ink-muted); overflow-wrap: anywhere; }
 .tag { font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: 0.8px; text-transform: uppercase; color: var(--ink); white-space: nowrap; }
 .tag.muted { color: var(--ink-muted); }
+/* status colors: after .t, .s and .tag so they win */
+.tone-ink { color: var(--ink); }
+.tone-muted { color: var(--ink-muted); }
+.tone-alert { color: var(--alert); }
+.tone-info { color: var(--info); }
+.tone-warn { color: var(--warn); }
+.tone-ok { color: var(--ok); }
 .empty { margin: 0; padding: 14px; font-size: 12px; color: var(--ink-muted); }
 .err { margin: 0; padding: 8px 14px; font-size: 12px; line-height: 1.4; color: var(--alert); border-bottom: 1px solid var(--grid-soft); }
 /* Stale data: mute text instead of opacity, so contrast stays >= 4.5:1 (ink-muted 7.04:1). */
 .is-stale .row, .is-stale .row *, .is-stale .pr, .is-stale .pr * { color: var(--ink-muted); }
+.is-stale .row, .is-stale .pr { border-left-color: var(--grid); }
+.is-stale .spin { animation: none; }
 .foot { margin: 0; font-size: 12px; color: var(--ink-muted); }
 
 /* waiting block */
@@ -74,6 +91,10 @@ body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var
 /* PR rows */
 .pr { padding: 12px 14px; border-top: 1px solid var(--grid-soft); display: flex; flex-direction: column; gap: 6px; }
 .pr-top { display: flex; justify-content: space-between; gap: 8px; }
+.pr-tags { display: flex; gap: 8px; align-items: flex-start; }
+.pr-labels { display: flex; flex-wrap: wrap; gap: 4px; }
+.label { font-size: 11px; line-height: 1.4; padding: 0 6px; border: 1px solid var(--grid); color: var(--ink-muted); }
+.label.tone-alert { color: var(--alert); border-color: var(--alert); }
 .pr-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .pr-meta span { display: flex; gap: 6px; align-items: center; }
 .pr-meta .ico { width: 14px; height: 14px; margin: 0; }
@@ -87,6 +108,17 @@ body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var
   .row-wait { grid-template-columns: 16px minmax(0, 1fr) auto; }
   .row-wait .tag { display: none; }
 }
+/* animations */
+.spin { animation: spin 1.4s linear infinite; transform-origin: 50% 50%; }
+.waiting.is-alert .wait-side { animation: pulse 2s ease-in-out infinite; }
+.flash { animation: flash 1.6s ease-out; }
+.enter { animation: enter 0.35s ease-out; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* darker red only, so white text keeps its contrast */
+@keyframes pulse { 50% { background-color: #8F0F0F; } }
+@keyframes flash { from { background-color: #333333; } to { background-color: transparent; } }
+@keyframes enter { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }

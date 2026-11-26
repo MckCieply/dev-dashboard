@@ -7,7 +7,7 @@ A local Node service and web page (`http://localhost:4317`) that shows, in one p
 - the Actions run queue with required labels and wait time;
 - open pull requests (checks, review, merge state).
 
-It fires Windows toasts (with sound) when something needs you: a session starts waiting, a runner goes offline or comes back, PR checks fail, a PR becomes ready to merge. The UI is in Polish; code and docs are in English.
+It fires Windows toasts (with sound) for GitHub and runner events only: a PR starts needing a human, PR checks fail, a PR becomes ready to merge, a PR is merged, a runner goes offline or comes back. Claude sessions never raise a toast; they are shown on the page. The UI is in Polish; code and docs are in English.
 
 ## Requirements
 
@@ -48,19 +48,39 @@ Remove the hooks with `npm run uninstall-hooks`.
 
 | Hook event | Session state | Detail |
 |---|---|---|
-| `SessionStart` | waiting | nowa sesja (no toast) |
+| `SessionStart` | waiting | nowa sesja |
 | `UserPromptSubmit` | working | myśli |
 | `PreToolUse` | working | tool name |
 | `PostToolUse` | working | tool name |
 | `PermissionRequest` | waiting | prośba o zgodę: tool |
 | `Notification` (permission prompt) | waiting | prośba o zgodę: tool |
 | `Notification` (idle) | waiting | czeka na odpowiedź |
-| `Stop` | waiting | odpowiedź gotowa |
+| `Stop` while a background subagent or workflow runs | working | czeka na subagenta |
+| `Stop` while a background shell waits for a PR or CI, and no question is open | working, tag `[CZEKA NA PR]` | czeka na PR #N, or czeka na CI |
+| `Stop` otherwise (other background shells do not count) | waiting | odpowiedź gotowa |
 | `SessionEnd` | removed | |
-| no event for 30 min while working | unknown | brak zdarzeń N min |
+| no event for 30 min while working (3 h during a PR or CI wait) | unknown | brak zdarzeń |
 | no event for 12 h in any state | removed | |
 
-Session id is `session_id`, project is the last segment of `cwd`, task is the first line of the first prompt (max 60 chars). Sessions are kept in `sessions.json`, so a restart keeps them and does not re-toast them.
+### Waiting for a PR
+
+A background shell counts as a PR or CI wait when its command runs `wait-pr`, `gh run watch`, `gh pr checks --watch`, or an `until`/`while` loop with `sleep` and `gh pr`, `gh run` or `gh api`. The session still waits for you when it asked something: a question mark in the last paragraph of its final message, or a question in the desktop app next-step box (`mcp__ccd_turn__wrap_up` with `ask`). While a session waits on background work, the idle notification is ignored.
+
+Not detected: a PR watched only by the desktop app CI monitor, because it leaves no background task.
+
+An open permission request stays on screen until the asking agent (or the asked tool) reports a tool event, so parallel subagents do not hide it.
+
+Session id is `session_id`. A session is shown under its human-readable name: the last `custom-title` entry in its transcript (`~/.claude/projects/*/<session_id>.jsonl`, re-read every 5 s). Without one, the name is the first line of the first prompt the user typed (max 60 chars; harness blocks such as `<system-reminder>` or `<task-notification>` are skipped), then "Sesja bez nazwy". Branch, folder and environment names are never used as the name. Sessions are kept in `sessions.json`, so a restart keeps them.
+
+## Pull requests
+
+- The list covers open PRs of your active repos. Failing checks come before ready ones.
+- "Needs a human" means an open PR with label `needs-human` and without `human-approved` (case-insensitive). The search covers every non-archived repo you have, not only active ones. Such PRs head the "Czeka na Ciebie" block and the PR list with a red `[NEEDS HUMAN]` tag.
+- Merged PRs of the last 24 h are read for the "merged" toast.
+- Toasts for needs-human and merged fire once per PR. What already exists at the first poll after a start stays silent.
+- Each toast kind has its own icon in `assets/toast/`; regenerate them with `npm run icons`. Windows toast backgrounds cannot be colored, so the color is in the icon.
+
+The browser tab icon turns red when something waits for you.
 
 ## Autostart on Windows (Task Scheduler)
 
@@ -84,9 +104,10 @@ Session id is `session_id`, project is the last segment of `cwd`, task is the fi
 1. `npm start`; the console prints `Dev dashboard: http://127.0.0.1:4317`.
 2. Open `http://localhost:4317`; the header shows `LIVE`.
 3. Start a Claude Code session in any project; it appears in the list.
-4. Trigger a permission prompt; a toast `Czeka: <project>` plays a sound and the session shows `[CZEKA]`.
+4. Trigger a permission prompt; the session shows `[CZEKA]` and no toast fires.
 5. Stop a self-hosted runner; after about 60 s an offline toast appears and the runner shows offline. Start it again and expect the back-online toast.
-6. Restart the service while a session is waiting: it is still listed and no toast fires.
+6. Restart the service while a session is waiting: it is still listed.
+7. Add label `needs-human` to an open PR; within 30 s it heads the "Czeka na Ciebie" block and one toast plays a sound.
 
 ## Limitations
 

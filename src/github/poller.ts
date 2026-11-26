@@ -5,11 +5,12 @@ import { GitHubClient, GitHubError } from './client.js';
 import { filterActiveRepos, orgsFromRepos, REPOS_PATH, type RawRepo } from './repos.js';
 import { mapRunners, type RawRunner } from './runners.js';
 import { mapRuns, type RawJob, type RawRun } from './queue.js';
-import { buildPrQuery, mapPrs } from './prs.js';
+import { buildPrQuery, mapMerged, mapPrs } from './prs.js';
 
 const NO_TOKEN = 'brak tokenu GitHub';
 const LOW_RATE = 500;
 const REPOS_RETRY_MS = 30_000;
+const MERGED_WINDOW_MS = 24 * 60 * 60_000;
 
 function errText(e: unknown): string {
   return e instanceof GitHubError ? `błąd ${e.status}` : 'błąd sieci';
@@ -150,11 +151,19 @@ export class GitHubPoller {
 
   private async pollPrs(client: GitHubClient, repos: string[]): Promise<void> {
     try {
-      if (repos.length === 0) {
+      // needs-human and merged searches cover every repo of the user, active or not.
+      const usable = this.rawRepos.filter((r) => !r.archived);
+      const owners = [...new Set(usable.map((r) => r.owner.login))];
+      if (repos.length === 0 && owners.length === 0) {
         this.store.setPrs([]);
+        this.store.setMerged([]);
       } else {
-        const data = await client.graphql<unknown>(buildPrQuery(repos));
-        this.store.setPrs(mapPrs(data, repos));
+        const since = new Date(this.now() - MERGED_WINDOW_MS).toISOString().slice(0, 10);
+        const data = await client.graphql<unknown>(buildPrQuery(repos, owners, since));
+        // An owner search also returns repos of that owner the user has nothing to do with.
+        const mine = new Set([...repos, ...usable.map((r) => r.full_name)]);
+        this.store.setPrs(mapPrs(data, repos).filter((p) => mine.has(p.repo)));
+        this.store.setMerged(mapMerged(data).filter((p) => mine.has(p.repo)));
       }
       this.ok('prs');
     } catch (e) {
