@@ -1,6 +1,6 @@
 # Design direction — locked
 
-**Status: LOCKED (2026-11-26).** Single source of truth for the dashboard's look.
+**Status: LOCKED (2026-11-26; color and motion revised with the owner the same day).** Single source of truth for the dashboard's look.
 Read this before generating any UI. Do not re-pick a style per screen. Density
 changes are variants inside this style (spacing, type scale), not a new style.
 Changing this file is a deliberate decision taken with the owner.
@@ -26,28 +26,62 @@ Telemetry spec is the reference. Mockup: `design/telemetria-mockup.dc.html`
 | `alert-fill` | `#E61919` | Red as **fill** only, with `#FFFFFF` text (4.65:1). Never as text. |
 | `live` | `#4AF626` | One "LIVE" indicator in the header. Nowhere else. |
 
+| `info` | `#4DA3FF` | In progress: working, busy |
+| `warn` | `#FFB000` | Waiting on the system: queued, pending, blocked |
+| `ok` | `#3DD68C` | Good: ready, pass, approved, free runner |
+
 Rules:
-- Red means "needs you or broken". Only `alert`/`alert-fill` are chromatic,
-  besides the single `live` dot.
+- Red means "needs you or broken". Never use red for anything else.
 - Every status = icon + uppercase label in brackets, e.g. `[CZEKA]`. Never color alone.
-- Labels and values stay in `ink`/`ink-muted`; color goes on the icon (dataviz rule).
+- Status color goes on the icon, the bracket label, a 3px left row bar and
+  non-zero tile counts. Titles, sub-lines and values stay `ink`/`ink-muted`.
+- Stale panels drop all status color.
 - No gradients, no shadows, no glow effects in v1.
 
 ### Status map
 
-| Status | Icon color | Label |
+| Status | Color | Label |
 |---|---|---|
 | session waiting | `alert` | `[CZEKA]` |
-| session working | `ink` | `[PRACUJE]` |
+| session working | `info` | `[PRACUJE]` |
+| session waiting for a PR or CI | `warn` | `[CZEKA NA PR]` |
 | session unknown | `ink-muted` | `[NIEZNANY]` |
-| runner busy | `ink` | `[ZAJĘTY]` |
-| runner idle | `ink-muted` | `[WOLNY]` |
+| runner busy | `info` | `[ZAJĘTY]` |
+| runner idle | `ok` | `[WOLNY]` |
 | runner offline | `alert` | `[OFFLINE]` |
-| run in progress | `ink` | `[W TRAKCIE]` |
-| run queued | `ink-muted` | `[W KOLEJCE]` |
-| check pass / approved | `ink` | text |
+| run in progress | `info` | `[W TRAKCIE]` |
+| run queued | `warn` | `[W KOLEJCE]` |
+| PR needs a human (listed first, also in "Czeka na Ciebie") | `alert` | `[NEEDS HUMAN]` |
+| PR ready | `ok` | `[GOTOWY]` |
+| PR blocked | `warn` | `[ZABLOKOWANY]` |
+| PR conflict | `alert` | `[KONFLIKT]` |
+| PR draft / unknown | `ink-muted` | `[DRAFT]` / `[?]` |
+| check pass / approved | `ok` | text |
 | check fail / changes requested | `alert` | text |
-| check pending / review pending | `ink-muted` | text |
+| check pending / review pending | `warn` | text |
+| no checks / no review | `ink-muted` | text |
+
+PR labels show under the title in `ink-muted`; only `needs-human` is red.
+
+## Toast icons and favicon
+
+- One 256 px PNG per toast kind (`scripts/make-icons.mjs`), color and sign in the icon:
+  needs-human red person with `!`, checks-failed red cross, ready green check,
+  merged purple `#8250DF` merge glyph, runner-offline red server with slash,
+  runner-online green server. Purple is used for merged only.
+- Favicon: black square with a blue pulse line; red square with a white pulse
+  when something waits for you.
+
+## Motion
+
+| Motion | Where |
+|---|---|
+| spinner, 1.4 s | icon of `[PRACUJE]` and `[W TRAKCIE]` |
+| pulse, 2 s | red "Czeka na Ciebie" block (darker red, no glow) |
+| flash, 1.6 s | row whose status changed |
+| slide-in, 0.35 s | new row after the first paint |
+
+Repaints patch existing nodes (`public/morph.js`) so animations do not restart.
 
 ## Typography
 
@@ -75,4 +109,4 @@ Rules:
 - Semantic markup: `<section aria-labelledby>`, `<h2>` per panel, `<data>`/`<time>`
   for values, icons `aria-hidden="true"`.
 - Waiting count change is announced with `aria-live="polite"` on the counter.
-- Respect `prefers-reduced-motion` (no blinking).
+- Respect `prefers-reduced-motion`: all motion off.

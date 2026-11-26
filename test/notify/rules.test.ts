@@ -5,7 +5,7 @@ import type { DashboardState, PullRequest, Runner, Session } from '../../src/typ
 const ok = { ok: true, lastSuccessAt: null, error: null };
 function st(p: Partial<DashboardState> = {}): DashboardState {
   return {
-    sessions: [], runners: [], queue: [], prs: [], repos: [],
+    sessions: [], runners: [], queue: [], prs: [], merged: [], repos: [],
     collectors: { sessions: { ...ok }, repos: { ...ok }, runners: { ...ok }, queue: { ...ok }, prs: { ...ok } },
     rate: null, toasts: true, now: 0, ...p,
   };
@@ -17,7 +17,7 @@ const sess = (o: Partial<Session> = {}): Session => ({
 const runner = (o: Partial<Runner> = {}): Runner => ({ id: 1, name: 'r1', os: 'Windows', labels: [], state: 'idle', job: null, ...o });
 const pr = (o: Partial<PullRequest> = {}): PullRequest => ({
   id: 'p1', repo: 'o/r', number: 7, title: 'Fix', url: 'u', draft: false,
-  checks: { state: 'pending', passed: 0, failed: 0, total: 1 }, review: 'none', merge: 'blocked', ...o,
+  checks: { state: 'pending', passed: 0, failed: 0, total: 1 }, review: 'none', merge: 'blocked', labels: [], needsHuman: false, ...o,
 });
 function polled(runners: Runner[], at: number, extra: Partial<DashboardState> = {}): DashboardState {
   const s = st({ runners, ...extra });
@@ -25,44 +25,12 @@ function polled(runners: Runner[], at: number, extra: Partial<DashboardState> = 
   return s;
 }
 
-describe('sessions', () => {
-  it('alerts working -> waiting', () => {
-    const e = createAlertEngine();
-    const a = e.evaluate(st({ sessions: [sess({ state: 'waiting' })] }), st({ sessions: [sess()] }));
-    expect(a).toHaveLength(1);
-    expect(a[0].title).toBe('Czeka: proj');
-    expect(a[0].message).toBe('Potrzebuje zgody · do it');
-  });
-  it('omits task separator when task empty', () => {
-    const a = createAlertEngine().evaluate(st({ sessions: [sess({ state: 'waiting', task: '' })] }), st({ sessions: [sess()] }));
-    expect(a[0].message).toBe('Potrzebuje zgody');
-  });
-  it('no alert waiting -> waiting', () => {
-    const w = sess({ state: 'waiting' });
-    expect(createAlertEngine().evaluate(st({ sessions: [{ ...w, detail: 'x' }] }), st({ sessions: [w] }))).toEqual([]);
-  });
-  it('no alert for a waiting session at the baseline evaluation', () => {
-    expect(createAlertEngine().evaluate(st({ sessions: [sess({ state: 'waiting' })] }), st())).toEqual([]);
-  });
-  it('alerts a session first seen already waiting (after baseline), not for "nowa sesja"', () => {
+describe('sessions (Claude toasts are off)', () => {
+  it.each(['prośba o zgodę: Bash', 'odpowiedź gotowa', 'czeka na odpowiedź'])('no alert for a session waiting: %s', (detail) => {
     const e = createAlertEngine();
     e.evaluate(st(), st());
-    const a = e.evaluate(st({ sessions: [sess({ state: 'waiting', detail: 'prośba o zgodę: Bash' })] }), st());
-    expect(a).toHaveLength(1);
-    expect(a[0].title).toBe('Czeka: proj');
-    const b = e.evaluate(st({ sessions: [sess({ id: 's9', state: 'waiting', detail: 'nowa sesja' })] }), st());
-    expect(b).toEqual([]);
-  });
-  it('restored waiting session (present in prev) does not alert', () => {
-    const e = createAlertEngine();
-    const w = sess({ state: 'waiting', detail: 'odpowiedź gotowa' });
-    e.evaluate(st({ sessions: [w] }), st({ sessions: [w] }));
-    expect(e.evaluate(st({ sessions: [w], prs: [pr()] }), st({ sessions: [w] }))).toEqual([]);
-  });
-  it('no alert working -> unknown (also a sweep of many)', () => {
-    const prev = st({ sessions: [sess(), sess({ id: 's2' }), sess({ id: 's3' })] });
-    const next = st({ sessions: prev.sessions.map((s) => ({ ...s, state: 'unknown' as const })) });
-    expect(createAlertEngine().evaluate(next, prev)).toEqual([]);
+    expect(e.evaluate(st({ sessions: [sess({ state: 'waiting', detail })] }), st({ sessions: [sess()] }))).toEqual([]);
+    expect(e.evaluate(st({ sessions: [sess({ id: 's2', state: 'waiting', detail })] }), st())).toEqual([]);
   });
   it('restart: fresh engine with identical restored state gives no alerts', () => {
     const s = st({ sessions: [sess({ state: 'waiting' })], runners: [runner({ state: 'offline' })] });
@@ -70,7 +38,6 @@ describe('sessions', () => {
     expect(createAlertEngine().evaluate(s, s)).toEqual([]);
   });
 });
-
 describe('runners', () => {
   it('offline: none after 1 poll, one after 2, none extra after 3', () => {
     const e = createAlertEngine();
@@ -160,5 +127,82 @@ describe('prs', () => {
   });
   it('no alert for new PR', () => {
     expect(createAlertEngine().evaluate(st({ prs: [failing] }), st())).toEqual([]);
+  });
+});
+
+describe('needs-human', () => {
+  const human = pr({ needsHuman: true, labels: ['needs-human'] });
+  const polledPrs = (prs: PullRequest[]) => {
+    const s = st({ prs });
+    s.collectors.prs = { ok: true, lastSuccessAt: 1, error: null };
+    return s;
+  };
+  it('silent for PRs that already need a human at the first poll', () => {
+    const e = createAlertEngine();
+    expect(e.evaluate(st({ prs: [human] }), st())).toEqual([]);
+    expect(e.evaluate(polledPrs([human]), st({ prs: [human] }))).toEqual([]);
+  });
+  it('alerts once when a known PR starts to need a human', () => {
+    const e = createAlertEngine();
+    e.evaluate(polledPrs([pr()]), st());
+    const a = e.evaluate(polledPrs([human]), polledPrs([pr()]));
+    expect(a.map((x) => [x.title, x.message])).toEqual([['Wymaga człowieka: o/r #7', 'Fix']]);
+    expect(e.evaluate(polledPrs([human]), polledPrs([human]))).toEqual([]);
+  });
+  it('alerts a new PR after an empty first poll', () => {
+    const e = createAlertEngine();
+    e.evaluate(polledPrs([]), st());
+    expect(e.evaluate(polledPrs([human]), polledPrs([]))).toHaveLength(1);
+  });
+  it('startup events before the first PR poll do not count as the first poll', () => {
+    const e = createAlertEngine();
+    e.evaluate(st({ sessions: [sess()] }), st());
+    expect(e.evaluate(st({ prs: [human] }), st())).toEqual([]);
+  });
+  it('alerts again after the label was cleared and returned', () => {
+    const e = createAlertEngine();
+    e.evaluate(polledPrs([human]), st());
+    e.evaluate(polledPrs([pr()]), polledPrs([human]));
+    expect(e.evaluate(polledPrs([human]), polledPrs([pr()]))).toHaveLength(1);
+  });
+});
+describe('merged', () => {
+  const m = (id: string, number = 7) => ({ id, repo: 'o/r', number, title: 'Fix' });
+  const polledMerged = (merged: ReturnType<typeof m>[]) => {
+    const s = st({ merged });
+    s.collectors.prs = { ok: true, lastSuccessAt: 1, error: null };
+    return s;
+  };
+  it('silent for PRs merged before the first poll', () => {
+    const e = createAlertEngine();
+    expect(e.evaluate(st({ merged: [m('a')] }), st())).toEqual([]);
+    expect(e.evaluate(polledMerged([m('a')]), st())).toEqual([]);
+  });
+  it('alerts each newly merged PR once, even after it leaves and returns to the list', () => {
+    const e = createAlertEngine();
+    e.evaluate(polledMerged([]), st());
+    const a = e.evaluate(polledMerged([m('a')]), polledMerged([]));
+    expect(a.map((x) => [x.kind, x.title, x.message])).toEqual([['merged', 'Zmergowany: o/r #7', 'Fix']]);
+    e.evaluate(polledMerged([]), polledMerged([m('a')]));
+    expect(e.evaluate(polledMerged([m('a')]), polledMerged([]))).toEqual([]);
+  });
+});
+
+describe('alert kinds', () => {
+  const polled2 = (o: object, stamp: number) => {
+    const s = st(o);
+    s.collectors.prs = { ok: true, lastSuccessAt: stamp, error: null };
+    s.collectors.runners = { ok: true, lastSuccessAt: stamp, error: null };
+    return s;
+  };
+  it('every alert carries the kind that picks its icon', () => {
+    const e = createAlertEngine();
+    const a = polled2({ prs: [pr()], runners: [runner()] }, 1);
+    const b = polled2({ prs: [pr({ checks: { state: 'fail', passed: 0, failed: 1, total: 1 } })], runners: [runner({ state: 'offline' })] }, 2);
+    const c = polled2({ prs: [pr({ merge: 'ready', needsHuman: true })], runners: [runner({ state: 'offline' })] }, 3);
+    const d = polled2({ prs: [], runners: [runner()] }, 4);
+    e.evaluate(a, st());
+    const kinds = [...e.evaluate(b, a), ...e.evaluate(c, b), ...e.evaluate(d, c)].map((x) => x.kind);
+    expect(kinds.sort()).toEqual(['checks-failed', 'needs-human', 'ready', 'runner-offline', 'runner-online']);
   });
 });

@@ -166,3 +166,74 @@ describe('sweep', () => {
     expect(s).toEqual(copy);
   });
 });
+
+describe('background work and subagents', () => {
+  const stopWith = (tasks: { type: string; status: string }[], base: Sessions = {}, now = T0) =>
+    applyHookEvent(base, ev({ hook_event_name: 'Stop', background_tasks: tasks }), now);
+  const sub = { type: 'subagent', status: 'running' };
+
+  it('Stop with a running subagent stays working', () => {
+    expect(stopWith([sub]).s1).toMatchObject({ state: 'working', detail: 'czeka na subagenta' });
+  });
+  it('Stop with several running subagents/workflows shows the count', () => {
+    expect(stopWith([sub, { type: 'workflow', status: 'running' }]).s1.detail).toBe('czeka na subagentów (2)');
+  });
+  it('Stop with only a background shell is a ready answer', () => {
+    expect(stopWith([{ type: 'shell', status: 'running' }]).s1).toMatchObject({ state: 'waiting', detail: 'odpowiedź gotowa' });
+  });
+  it('Stop with a finished subagent is a ready answer', () => {
+    expect(stopWith([{ type: 'subagent', status: 'completed' }]).s1.state).toBe('waiting');
+  });
+  it('Stop with malformed background_tasks is a ready answer', () => {
+    const s = applyHookEvent({}, ev({ hook_event_name: 'Stop', background_tasks: [null, 5] as never }), T0).s1;
+    expect(s.state).toBe('waiting');
+  });
+
+  const asked = (agent_id?: string) =>
+    applyHookEvent({}, ev({ hook_event_name: 'PermissionRequest', tool_name: 'Bash', agent_id }), T0);
+
+  it('another subagent tool event keeps the permission wait', () => {
+    const s = applyHookEvent(asked(), ev({ hook_event_name: 'PreToolUse', tool_name: 'Read', agent_id: 'x' }), T0 + 5).s1;
+    expect(s).toMatchObject({ state: 'waiting', detail: 'prośba o zgodę: Bash', since: T0, lastEventAt: T0 + 5 });
+  });
+  it('tool event from the asking agent clears the permission wait', () => {
+    const s = applyHookEvent(asked('x'), ev({ hook_event_name: 'PostToolUse', tool_name: 'Bash', agent_id: 'x' }), T0 + 5).s1;
+    expect(s.state).toBe('working');
+  });
+  it('PostToolUse of the asked tool clears the wait even if the request had no agent_id', () => {
+    const s = applyHookEvent(asked(), ev({ hook_event_name: 'PostToolUse', tool_name: 'Bash', agent_id: 'x' }), T0 + 5).s1;
+    expect(s.state).toBe('working');
+  });
+  it('Notification without agent_id keeps the asking agent', () => {
+    let s = applyHookEvent(asked('x'), ev({ hook_event_name: 'Notification', notification_type: 'permission_prompt' }), T0 + 1);
+    s = applyHookEvent(s, ev({ hook_event_name: 'PreToolUse', tool_name: 'Read', agent_id: 'x' }), T0 + 5);
+    expect(s.s1.state).toBe('working');
+  });
+  it('Stop with a running subagent keeps a pending permission wait', () => {
+    const s = stopWith([sub], asked('x'), T0 + 5).s1;
+    expect(s).toMatchObject({ state: 'waiting', detail: 'prośba o zgodę: Bash' });
+  });
+  it('after the permission wait ends, subagent events apply again', () => {
+    let s = applyHookEvent(asked(), ev({ hook_event_name: 'UserPromptSubmit', prompt: 'ok' }), T0 + 1);
+    s = applyHookEvent(s, ev({ hook_event_name: 'PreToolUse', tool_name: 'Read', agent_id: 'x' }), T0 + 5);
+    expect(s.s1).toMatchObject({ state: 'working', detail: 'Read' });
+  });
+});
+
+describe('taskFromPrompt ignores system messages', () => {
+  it('skips a system-reminder block and uses the text after it', () => {
+    expect(taskFromPrompt('<system-reminder>\nrules\n</system-reminder>\nFix login')).toBe('Fix login');
+    expect(taskFromPrompt('<system-reminder id="1">r</system-reminder id="1">\n\nFix it')).toBe('Fix it');
+  });
+  it('gives no task for agent messages and notifications', () => {
+    expect(taskFromPrompt('<agent-message from="a1">\nreport\n</agent-message>\nThat other session is an agent')).toBe('');
+    expect(taskFromPrompt('<task-notification>\n<task-id>1</task-id>\n</task-notification>')).toBe('');
+    expect(taskFromPrompt('Another text\n<agent-message from="a1">x</agent-message>')).toBe('Another text');
+  });
+  it('gives no task for an unclosed system tag', () => {
+    expect(taskFromPrompt('<system-reminder>\ntruncated')).toBe('');
+  });
+  it('keeps ordinary markup in a user prompt', () => {
+    expect(taskFromPrompt('<div> is broken')).toBe('<div> is broken');
+  });
+});

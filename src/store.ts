@@ -1,5 +1,5 @@
 import type {
-  CollectorName, CollectorStatus, DashboardState, HookEvent, PullRequest, QueuedRun, RateInfo, Runner, Session,
+  CollectorName, CollectorStatus, DashboardState, HookEvent, MergedPr, PullRequest, QueuedRun, RateInfo, Runner, Session,
 } from './types.js';
 import { applyHookEvent, sweep, type Sessions } from './sessions/machine.js';
 
@@ -20,6 +20,8 @@ export class Store {
   private runners: Runner[] = [];
   private queue: QueuedRun[] = [];
   private prs: PullRequest[] = [];
+  private merged: MergedPr[] = [];
+  private readonly titleOf: (id: string) => string | null;
   private repos: string[] = [];
   private rate: RateInfo | null = null;
   private readonly toasts: boolean;
@@ -33,8 +35,9 @@ export class Store {
     prs: { ok: false, lastSuccessAt: null, error: null },
   };
 
-  constructor(init: { sessions?: Sessions; toasts: boolean; now?: () => number }) {
-    this.sessions = init.sessions ?? {};
+  constructor(init: { sessions?: Sessions; toasts: boolean; now?: () => number; titleOf?: (id: string) => string | null }) {
+    this.titleOf = init.titleOf ?? (() => null);
+    this.sessions = this.titled(init.sessions ?? {});
     this.toasts = init.toasts;
     this.now = init.now ?? Date.now;
   }
@@ -45,6 +48,7 @@ export class Store {
       runners: this.runners.map((r) => ({ ...r })),
       queue: this.queue.map((q) => ({ ...q })),
       prs: this.prs.map((p) => ({ ...p })),
+      merged: this.merged.map((m) => ({ ...m })),
       repos: [...this.repos],
       collectors: {
         sessions: { ...this.collectors.sessions },
@@ -73,12 +77,29 @@ export class Store {
     for (const fn of [...this.listeners]) fn(next, prev);
   }
 
+  /** Returns the same object when no name changed. */
+  private titled(sessions: Sessions, ids: string[] = Object.keys(sessions)): Sessions {
+    let out = sessions;
+    for (const id of ids) {
+      const s = out[id];
+      const title = s ? this.titleOf(id) : null;
+      if (s && title && title !== s.title) out = { ...out, [id]: { ...s, title } };
+    }
+    return out;
+  }
+
+  refreshTitles(): void {
+    const named = this.titled(this.sessions);
+    if (named === this.sessions) return;
+    this.change(() => { this.sessions = named; });
+  }
+
   applyHook(ev: HookEvent): void {
     const t = this.now();
     const updated = applyHookEvent(this.sessions, ev, t);
     if (updated === this.sessions) return;
     this.change(() => {
-      this.sessions = updated;
+      this.sessions = this.titled(updated, [ev.session_id]);
       this.collectors.sessions = { ok: true, lastSuccessAt: t, error: null };
     });
   }
@@ -93,6 +114,7 @@ export class Store {
   setRunners(r: Runner[]): void { this.change(() => { this.runners = r; }); }
   setQueue(q: QueuedRun[]): void { this.change(() => { this.queue = q; }); }
   setPrs(p: PullRequest[]): void { this.change(() => { this.prs = p; }); }
+  setMerged(m: MergedPr[]): void { this.change(() => { this.merged = m; }); }
   setCollector(name: CollectorName, status: Partial<CollectorStatus>): void {
     this.change(() => { this.collectors[name] = { ...this.collectors[name], ...status }; });
   }

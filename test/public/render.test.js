@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   esc, fmtDuration, fmtClock, renderHeader, renderWaiting, renderTiles, renderSessions,
-  renderRunners, renderQueue, renderPrs, renderFooter, collectorError,
+  renderRunners, renderQueue, renderPrs, renderFooter, collectorError, waitingCount, faviconFor,
 } from '../../public/render.js';
 
 const NOW = 1_800_000_000_000;
@@ -287,11 +288,132 @@ describe('renderFooter', () => {
   });
 });
 
-describe('session without task', () => {
-  it('shows only the project name, no dangling separator', () => {
-    const s = state({ sessions: [sess({ task: '', state: 'waiting', detail: 'nowa sesja' })] });
-    const html = renderSessions(s, NOW) + renderWaiting(s, NOW);
-    expect(html).toContain('>proj<');
-    expect(html).not.toContain('proj / ');
+
+describe('color coding', () => {
+  const row = (html) => html.match(/class="(?:row|pr)(?: [^"]*)?"/g);
+  it('sessions get a row tone and a colored tag', () => {
+    const html = renderSessions(state({
+      sessions: [sess({ id: '1', state: 'waiting' }), sess({ id: '2' }), sess({ id: '3', state: 'unknown' })],
+    }), NOW);
+    expect(row(html)).toEqual(['class="row st-alert"', 'class="row st-info"', 'class="row st-muted"']);
+    expect(html).toContain('<span class="tag tone-info">[PRACUJE]</span>');
+  });
+  it('runners and queue tones', () => {
+    const runners = ['busy', 'idle', 'offline'].map((s, i) => ({ id: i, name: s, os: 'x', labels: [], state: s, job: null }));
+    expect(row(renderRunners(state({ runners }), NOW))).toEqual(['class="row st-info"', 'class="row st-ok"', 'class="row st-alert"']);
+    const base = { id: 1, repo: 'r', workflow: 'w', runNumber: 1, branch: 'b', url: 'u', createdAt: NOW, startedAt: null, labels: [], runnerName: null };
+    const queue = [{ ...base, state: 'in_progress' }, { ...base, id: 2, state: 'queued' }];
+    expect(row(renderQueue(state({ queue }), NOW))).toEqual(['class="row st-info"', 'class="row st-warn"']);
+  });
+  it('PR merge tag, checks and review tones', () => {
+    const pr = {
+      id: 'p', repo: 'r', number: 1, title: 't', url: 'u', draft: false,
+      checks: { state: 'pending', passed: 0, failed: 0, total: 1 }, review: 'approved', merge: 'ready',
+    };
+    const html = renderPrs(state({ prs: [pr] }));
+    expect(row(html)).toEqual(['class="pr st-ok"']);
+    expect(html).toContain('<span class="tag tone-ok">[GOTOWY]</span>');
+    expect(html).toContain('tone-warn');
+  });
+  it('tiles color only non-zero counts', () => {
+    const html = renderTiles(state({ sessions: [sess()] }));
+    expect(html).toContain('<span class="tone-info">1 PRACUJE</span>');
+    expect(html).not.toContain('tone-alert');
+  });
+});
+
+describe('animation hooks', () => {
+  it('rows carry a stable key and a status', () => {
+    const html = renderSessions(state({ sessions: [sess({ id: 'abc', state: 'waiting' })] }), NOW);
+    expect(html).toContain('data-key="s:abc"');
+    expect(html).toContain('data-status="waiting"');
+    expect(renderWaiting(state({ sessions: [sess({ id: 'abc', state: 'waiting' })] }), NOW)).toContain('data-key="w:abc"');
+  });
+  it('only working and running icons spin', () => {
+    expect(renderSessions(state({ sessions: [sess()] }), NOW)).toContain('ico tone-info spin');
+    expect(renderSessions(state({ sessions: [sess({ state: 'unknown' })] }), NOW)).not.toContain('spin');
+  });
+});
+describe('needs-human PRs', () => {
+  const pr = (o) => ({
+    id: 'p1', repo: 'o/r', number: 7, title: 'Fix <x>', url: 'https://github.com/o/r/pull/7', draft: false,
+    checks: { state: 'pass', passed: 1, failed: 0, total: 1 }, review: 'none', merge: 'ready',
+    labels: [], needsHuman: false, ...o,
+  });
+  const human = pr({ needsHuman: true, labels: ['needs-human', '<lbl>'] });
+
+  it('PR row: red tag, red tone, escaped labels', () => {
+    const html = renderPrs(state({ prs: [human] }));
+    expect(html).toContain('class="pr st-alert"');
+    expect(html).toContain('<span class="tag tone-alert">[NEEDS HUMAN]</span>');
+    expect(html).toContain('[GOTOWY]');
+    expect(html).toContain('<span class="label tone-alert">needs-human</span>');
+    expect(html).toContain('<span class="label">&lt;lbl&gt;</span>');
+  });
+  it('PR without the flag has no needs-human tag', () => {
+    expect(renderPrs(state({ prs: [pr()] }))).not.toContain('NEEDS HUMAN');
+  });
+  it('waiting block lists the PR and counts it with sessions', () => {
+    const html = renderWaiting(state({ prs: [human], sessions: [sess({ state: 'waiting' })] }), NOW);
+    expect(html).toContain('>02<');
+    expect(html).toContain('data-key="w:pr:p1"');
+    expect(html).toContain('href="https://github.com/o/r/pull/7"');
+    expect(html).toContain('o/r #7 / Fix &lt;x&gt;');
+    expect(html).toContain('MAX_WAIT 5 MIN');
+  });
+  it('waiting block with only a PR is red and has no MAX_WAIT', () => {
+    const html = renderWaiting(state({ prs: [human] }), NOW);
+    expect(html).toContain('is-alert');
+    expect(html).toContain('>01<');
+    expect(html).not.toContain('MAX_WAIT');
+  });
+  it('tile counts them', () => {
+    expect(renderTiles(state({ prs: [human, pr({ id: 'p2' })] }))).toContain('<span class="tone-alert">1 NEEDS HUMAN</span>');
+  });
+});
+describe('session name', () => {
+  const s = (o) => sess({ project: 'social-media-tool-1cc0d7', task: 'zrób narzędzie', state: 'waiting', ...o });
+  const views = (x) => [renderSessions(state({ sessions: [x] }), NOW), renderWaiting(state({ sessions: [x] }), NOW)];
+  it('shows the session title only, never the folder or branch', () => {
+    for (const html of views(s({ title: 'Narzędzie <social>' }))) {
+      expect(html).toContain('<div class="t">Narzędzie &lt;social&gt;</div>');
+      expect(html).not.toContain('1cc0d7');
+      expect(html).not.toContain('zrób narzędzie');
+    }
+  });
+  it('falls back to the first prompt, then to a neutral name', () => {
+    for (const html of views(s({}))) expect(html).toContain('<div class="t">zrób narzędzie</div>');
+    for (const html of views(s({ task: '' }))) {
+      expect(html).toContain('<div class="t">Sesja bez nazwy</div>');
+      expect(html).not.toContain('1cc0d7');
+    }
+  });
+});
+
+describe('waitingCount', () => {
+  it('counts waiting sessions and needs-human PRs', () => {
+    const prs = [{ id: 'a', needsHuman: true }, { id: 'b', needsHuman: false }];
+    expect(waitingCount(state({ sessions: [sess({ state: 'waiting' }), sess({ id: 'b' })], prs }))).toBe(2);
+  });
+});
+describe('favicon', () => {
+  it('turns red only while something waits for the user', () => {
+    expect(faviconFor(state({ sessions: [sess({})] }))).toBe('/favicon.svg');
+    expect(faviconFor(state({ sessions: [sess({ state: 'waiting' })] }))).toBe('/favicon-alert.svg');
+    expect(faviconFor(state({ prs: [{ id: 'a', needsHuman: true }] }))).toBe('/favicon-alert.svg');
+  });
+  it('both files exist and the page links one', () => {
+    for (const f of ['favicon.svg', 'favicon-alert.svg']) expect(readFileSync(`public/${f}`, 'utf8')).toContain('<svg');
+    expect(readFileSync('public/index.html', 'utf8')).toContain('<link id="favicon" rel="icon" type="image/svg+xml" href="/favicon.svg">');
+  });
+});
+describe('session waiting for a PR', () => {
+  it('has its own warn tag, not the working or waiting one', () => {
+    const s = state({ sessions: [sess({ waitsFor: 'pr', detail: 'czeka na PR #5' })] });
+    const html = renderSessions(s, NOW);
+    expect(html).toContain('class="row st-warn"');
+    expect(html).toContain('<span class="tag tone-warn">[CZEKA NA PR]</span>');
+    expect(html).not.toContain('[PRACUJE]');
+    expect(renderWaiting(s, NOW)).toContain('Nic nie czeka');
   });
 });

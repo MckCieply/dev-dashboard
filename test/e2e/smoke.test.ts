@@ -42,7 +42,11 @@ describe('smoke', () => {
     const calls: { title: string; message: string }[] = [];
     const notify = (o: { title: string; message: string }): void => { calls.push(o); };
 
-    const a = await startApp({ config: mkConfig(dataDir), token: 'test', fetch: fakeFetch, notify });
+    const projectsDir = path.join(dataDir, 'projects');
+    fs.mkdirSync(path.join(projectsDir, 'p'), { recursive: true });
+    fs.writeFileSync(path.join(projectsDir, 'p', 's1.jsonl'), '{"type":"custom-title","customTitle":"Moja sesja"}\n');
+
+    const a = await startApp({ config: mkConfig(dataDir), token: 'test', fetch: fakeFetch, notify, projectsDir });
     apps.push(a);
     await until(async () => (await state(a)).collectors.prs.ok);
     const st = await state(a);
@@ -54,8 +58,8 @@ describe('smoke', () => {
     expect((await hook(a, { ...ev, hook_event_name: 'UserPromptSubmit', prompt: 'do it' })).status).toBe(204);
     expect(calls).toHaveLength(0);
     expect((await hook(a, { ...ev, hook_event_name: 'PermissionRequest', tool_name: 'Bash' })).status).toBe(204);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].title).toBe('Czeka: my-proj');
+    expect(calls).toHaveLength(0); // Claude sessions never toast
+    expect((await state(a)).sessions[0].title).toBe('Moja sesja');
 
     const page = await fetch(`${a.url}/`);
     expect(page.status).toBe(200);
@@ -65,13 +69,13 @@ describe('smoke', () => {
     apps.length = 0;
     expect(fs.existsSync(path.join(dataDir, 'sessions.json'))).toBe(true);
 
-    const b = await startApp({ config: mkConfig(dataDir), token: 'test', fetch: fakeFetch, notify });
+    const b = await startApp({ config: mkConfig(dataDir), token: 'test', fetch: fakeFetch, notify, projectsDir });
     apps.push(b);
     await until(async () => (await state(b)).collectors.prs.ok);
     const st2 = await state(b);
     expect(st2.sessions.map((s) => s.id)).toEqual(['s1']);
     expect(st2.sessions[0].state).toBe('waiting');
-    expect(calls).toHaveLength(1); // no toast for restored state
+    expect(calls).toHaveLength(0); // no toast for restored state
   });
 
   it('rejects with EADDRINUSE when port is taken', async () => {
