@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.claude/run-state.md
+.claude/settings.local.json
+.env

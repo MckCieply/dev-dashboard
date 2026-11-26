@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Kierunek B: Telemetria</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0A0A}
+.b-m{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums}
+.b-cell{background:#121212;border:1px solid #2a2a2a;min-width:0;display:flex;flex-direction:column}
+.b-head{margin:0;display:flex;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid #2a2a2a;font:700 12px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:1.2px;text-transform:uppercase;color:#EAEAEA}
+.b-head small{font:400 11px/1 "JetBrains Mono",monospace;color:#9a9a9a;letter-spacing:0.6px}
+.b-row{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 14px;border-top:1px solid #1f1f1f}
+.b-row:first-of-type{border-top:0}
+.b-t{font:500 13px/1.4 "JetBrains Mono",ui-monospace,monospace;color:#EAEAEA}
+.b-s{font:400 12px/1.4 "JetBrains Mono",ui-monospace,monospace;color:#9a9a9a}
+.b-tag{font:700 11px/1 "JetBrains Mono",monospace;letter-spacing:0.8px;text-transform:uppercase;color:#EAEAEA;white-space:nowrap}
+.b-ico{width:16px;height:16px;margin-top:1px}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:100%;min-height:1180px;background:#0A0A0A;color:#EAEAEA;font-family:Inter,'Segoe UI',system-ui,sans-serif;padding:24px clamp(16px,3vw,40px)">
+<div style="max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:12px">
+
+<header style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;border:1px solid #2a2a2a;padding:12px 14px;background:#121212">
+<h1 style="margin:0;font:900 22px/1 Inter,sans-serif;letter-spacing:-0.2px;text-transform:uppercase">Dev dashboard <span class="b-m" style="font-size:12px;font-weight:400;color:#9a9a9a;letter-spacing:0.6px;text-transform:none">[ dane przykładowe ]</span></h1>
+<div class="b-m" style="display:flex;flex-wrap:wrap;gap:20px;font-size:12px;color:#9a9a9a;align-items:center">
+<span style="display:flex;gap:6px;align-items:center;color:#EAEAEA"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect width="10" height="10" fill="#4AF626"></rect></svg>LIVE</span>
+<span>SYNC 14:32:05</span><span>GH_API 4812/5000</span><span>TOAST ON</span>
+</div>
+</header>
+
+<section style="border:1px solid #E61919;background:#121212;display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr)" aria-labelledby="b-wait">
+<div style="background:#E61919;color:#FFFFFF;padding:18px 20px;display:flex;flex-direction:column;justify-content:space-between;gap:12px">
+<h2 id="b-wait" class="b-m" style="margin:0;font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase">[!] Czeka na Ciebie</h2>
+<div style="font:900 96px/0.9 Inter,sans-serif;letter-spacing:-3px">03</div>
+<div class="b-m" style="font-size:12px">MAX_WAIT 27 MIN</div>
+</div>
+<div>
+<sc-for list="{{ waiting }}" as="w" hint-placeholder-count="3">
+<div class="b-row" style="grid-template-columns:16px minmax(0,1fr) auto auto;padding:14px 16px">
+<svg class="b-ico" viewBox="0 0 24 24" fill="none" stroke="{{ w.color }}" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="{{ w.icon }}"></path></svg>
+<div><div class="b-t">{{ w.project }} / {{ w.task }}</div><div class="b-s">&gt; {{ w.reason }}</div></div>
+<span class="b-tag" style="color:#9a9a9a">[{{ w.where }}]</span>
+<span class="b-m" style="font-size:14px;font-weight:700;color:#FF2A2A;min-width:64px;text-align:right">{{ w.since }}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px">
+<div class="b-cell" style="padding:14px;gap:6px"><span class="b-tag" style="color:#9a9a9a">Sesje</span><span style="font:900 36px/1 Inter,sans-serif">07</span><span class="b-s">3 PRACUJE · 3 CZEKA · 1 ??</span></div>
+<div class="b-cell" style="padding:14px;gap:6px"><span class="b-tag" style="color:#9a9a9a">Runnery</span><span style="font:900 36px/1 Inter,sans-serif">2/3 <span style="font-size:14px;font-weight:500">ONLINE</span></span><span class="b-s">1 ZAJĘTY · 1 WOLNY · <span style="color:#FF2A2A">1 OFFLINE</span></span></div>
+<div class="b-cell" style="padding:14px;gap:6px"><span class="b-tag" style="color:#9a9a9a">Kolejka CI</span><span style="font:900 36px/1 Inter,sans-serif">02 <span style="font-size:14px;font-weight:500">QUEUED</span></span><span class="b-s">1 RUNNING · MAX 4 MIN</span></div>
+<div class="b-cell" style="padding:14px;gap:6px"><span class="b-tag" style="color:#9a9a9a">Pull requesty</span><span style="font:900 36px/1 Inter,sans-serif">05 <span style="font-size:14px;font-weight:500">OPEN</span></span><span class="b-s">1 READY · <span style="color:#FF2A2A">1 FAIL</span></span></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:12px;align-items:start">
+
+<section class="b-cell" aria-labelledby="b-ses">
+<h2 class="b-head" id="b-ses">// Sesje <small>LOCAL + CLOUD</small></h2>
+<div>
+<sc-for list="{{ sessions }}" as="s" hint-placeholder-count="7">
+<div class="b-row">
+<svg class="b-ico" viewBox="0 0 24 24" fill="none" stroke="{{ s.color }}" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="{{ s.icon }}"></path></svg>
+<div><div class="b-t">{{ s.project }} / {{ s.task }}</div><div class="b-s">{{ s.where }} · {{ s.detail }}</div></div>
+<span class="b-tag">[{{ s.label }}]</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+<section class="b-cell" aria-labelledby="b-run">
+<h2 class="b-head" id="b-run">// Runnery <small>ALL INCL. OFFLINE</small></h2>
+<div>
+<sc-for list="{{ runners }}" as="r" hint-placeholder-count="3">
+<div class="b-row">
+<svg class="b-ico" viewBox="0 0 24 24" fill="none" stroke="{{ r.color }}" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="{{ r.icon }}"></path></svg>
+<div><div class="b-t">{{ r.name }}</div><div class="b-s">{{ r.os }} · {{ r.detail }}</div></div>
+<span class="b-tag">[{{ r.label }}]</span>
+</div>
+</sc-for>
+</div>
+</section>
+<section class="b-cell" aria-labelledby="b-q">
+<h2 class="b-head" id="b-q">// Kolejka runów <small>ACTIVE REPOS</small></h2>
+<div>
+<sc-for list="{{ queue }}" as="q" hint-placeholder-count="3">
+<div class="b-row">
+<svg class="b-ico" viewBox="0 0 24 24" fill="none" stroke="{{ q.color }}" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="{{ q.icon }}"></path></svg>
+<div><div class="b-t">{{ q.repo }} / {{ q.workflow }} {{ q.run }}</div><div class="b-s">{{ q.branch }} · {{ q.detail }}</div></div>
+<span class="b-tag">[{{ q.label }}]</span>
+</div>
+</sc-for>
+</div>
+</section>
+</div>
+
+<section class="b-cell" aria-labelledby="b-pr">
+<h2 class="b-head" id="b-pr">// Pull requesty <small>OPEN</small></h2>
+<div>
+<sc-for list="{{ prs }}" as="p" hint-placeholder-count="5">
+<div style="padding:12px 14px;border-top:1px solid #1f1f1f;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;gap:8px"><div class="b-t">{{ p.repo }} {{ p.num }} / {{ p.title }}</div><span class="b-tag">[{{ p.merge }}]</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:6px 16px" class="b-s">
+<span style="display:flex;gap:6px;align-items:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ p.cColor }}" stroke-width="2.6" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="{{ p.cIcon }}"></path></svg>{{ p.cText }}</span>
+<span style="display:flex;gap:6px;align-items:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ p.rColor }}" stroke-width="2.6" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="{{ p.rIcon }}"></path></svg>{{ p.rText }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+renderVals() {
+const TONE = { waiting: '#FF2A2A', working: '#EAEAEA', unknown: '#9a9a9a', busy: '#EAEAEA', idle: '#9a9a9a', offline: '#FF2A2A', pass: '#EAEAEA', fail: '#FF2A2A', pending: '#9a9a9a', queued: '#9a9a9a', running: '#EAEAEA' };
+const ICON = {
+  waiting: 'M12 8v5M12 16.5v.5M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
+  working: 'M21 12a9 9 0 1 1-6.2-8.6',
+  unknown: 'M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17v.01M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
+  busy: 'M9 7l8 5-8 5z',
+  idle: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
+  offline: 'M4 4l16 16M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
+  pass: 'M5 12l5 5L20 7',
+  fail: 'M6 6l12 12M18 6L6 18',
+  pending: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
+  queued: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
+  running: 'M21 12a9 9 0 1 1-6.2-8.6'
+};
+const st = (s) => ({ icon: ICON[s], color: TONE[s], tone: s });
+const waiting = [
+  { project: 'Toviq', task: 'Poprawka maila onboardingowego', reason: 'Prośba o zgodę: Bash · npm run migrate', where: 'lokalna', since: '4 min' },
+  { project: 'claude-harness', task: 'Instalator hooków na Windows', reason: 'Odpowiedź gotowa, czeka na Ciebie', where: 'chmura', since: '12 min' },
+  { project: 'social-pilot', task: 'Harmonogram postów LinkedIn', reason: 'Pytanie: wybierz jedną z 3 opcji', where: 'lokalna', since: '27 min' }
+].map((x) => ({ ...x, ...st('waiting') }));
+const sessions = [
+  ...waiting.map((x) => ({ ...x, label: 'czeka', detail: x.since })),
+  { project: 'Auth-Core', task: 'Rotacja refresh tokenów', where: 'lokalna', label: 'pracuje', detail: 'edycja plików', ...st('working') },
+  { project: 'Toviq', task: 'Strony SEO, partia 3', where: 'chmura', label: 'pracuje', detail: 'testy', ...st('working') },
+  { project: 'dev-dashboard', task: 'Spec i plan', where: 'chmura', label: 'pracuje', detail: 'pisze', ...st('working') },
+  { project: 'job-radar', task: 'Naprawa scrapera', where: 'lokalna', label: 'nieznany', detail: 'brak zdarzeń 42 min', ...st('unknown') }
+];
+const runners = [
+  { name: 'win-runner-01', os: 'Windows · X64', label: 'zajęty', detail: 'Toviq · ci.yml #482 · 6 min', ...st('busy') },
+  { name: 'linux-runner-02', os: 'Linux · X64', label: 'wolny', detail: 'ostatni job 18 min temu', ...st('idle') },
+  { name: 'old-runner', os: 'Linux · X64', label: 'offline', detail: 'od 3 dni', ...st('offline') }
+];
+const queue = [
+  { repo: 'Toviq', workflow: 'ci.yml', run: '#482', branch: 'main', label: 'w trakcie', detail: '6 min · win-runner-01', ...st('running') },
+  { repo: 'Auth-Core', workflow: 'tests.yml', run: '#131', branch: 'feat/rotation', label: 'w kolejce', detail: 'czeka 4 min · potrzebuje: windows', ...st('queued') },
+  { repo: 'claude-harness', workflow: 'lint.yml', run: '#77', branch: 'main', label: 'w kolejce', detail: 'czeka 1 min · potrzebuje: windows', ...st('queued') }
+];
+const chk = (s, t) => ({ cIcon: ICON[s], cColor: TONE[s], cText: t });
+const rev = (s, t) => ({ rIcon: ICON[s], rColor: TONE[s], rText: t });
+const prs = [
+  { repo: 'Toviq', num: '#214', title: 'SEO: strony treściowe, partia 3', ...chk('fail', '1 z 6 checków nie przeszło'), ...rev('pending', 'czeka na review'), merge: 'zablokowany' },
+  { repo: 'Toviq', num: '#212', title: 'Nowa treść maila onboardingowego', ...chk('pass', '6 z 6 checków OK'), ...rev('pass', 'zatwierdzony'), merge: 'gotowy do merge' },
+  { repo: 'claude-harness', num: '#91', title: 'Instalator hooków na Windows', ...chk('pass', '4 z 4 checków OK'), ...rev('fail', 'prośba o zmiany'), merge: 'zablokowany' },
+  { repo: 'Auth-Core', num: '#58', title: 'Rotacja refresh tokenów', ...chk('pending', 'checki w toku, 2 z 5'), ...rev('pending', 'draft'), merge: 'draft' },
+  { repo: 'social-pilot', num: '#33', title: 'Ponawianie publikacji', ...chk('pass', '3 z 3 checków OK'), ...rev('pending', 'czeka na review'), merge: 'czeka na review' }
+];
+
+return { waiting, sessions, runners, queue, prs };
+}
+}
+</script>
+</body>
+</html>
