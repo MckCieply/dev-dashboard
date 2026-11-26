@@ -9,6 +9,7 @@ import { buildPrQuery, mapPrs } from './prs.js';
 
 const NO_TOKEN = 'brak tokenu GitHub';
 const LOW_RATE = 500;
+const REPOS_RETRY_MS = 30_000;
 
 function errText(e: unknown): string {
   return e instanceof GitHubError ? `błąd ${e.status}` : 'błąd sieci';
@@ -45,15 +46,18 @@ export class GitHubPoller {
     for (const n of ['repos', 'runners', 'queue', 'prs'] as const) this.fail(n, NO_TOKEN);
   }
 
-  async refreshRepos(): Promise<void> {
-    if (!this.client) { this.noToken(); return; }
+  /** Resolves true on success (or no client), false when the fetch failed. */
+  async refreshRepos(): Promise<boolean> {
+    if (!this.client) { this.noToken(); return true; }
     try {
       this.rawRepos = await this.client.rest<RawRepo[]>(REPOS_PATH);
       this.store.setRepos(filterActiveRepos(this.rawRepos, this.now(), this.config.activeDays));
       this.ok('repos');
+      return true;
     } catch (e) {
       this.log(`repos: ${String(e)}`);
       this.fail('repos', errText(e));
+      return false;
     }
   }
 
@@ -163,13 +167,25 @@ export class GitHubPoller {
     if (this.running) return;
     this.running = true;
     const reposLoop = async (): Promise<void> => {
-      await this.refreshRepos();
-      if (this.running) this.reposTimer = setTimeout(() => { void reposLoop(); }, this.config.reposRefreshMs);
+      let delay = this.config.reposRefreshMs;
+      try {
+        const ok = await this.refreshRepos();
+        if (!ok) delay = REPOS_RETRY_MS;
+      } catch (e) {
+        this.log(`reposLoop: ${String(e)}`);
+        delay = REPOS_RETRY_MS;
+      }
+      if (this.running) this.reposTimer = setTimeout(() => { void reposLoop(); }, delay);
     };
     const pollLoop = async (): Promise<void> => {
-      await this.pollOnce();
+      let slow = false;
+      try {
+        await this.pollOnce();
+        slow = this.store.get().rate?.slowed === true;
+      } catch (e) {
+        this.log(`pollLoop: ${String(e)}`);
+      }
       if (!this.running) return;
-      const slow = this.store.get().rate?.slowed === true;
       this.pollTimer = setTimeout(() => { void pollLoop(); }, slow ? this.config.slowPollMs : this.config.pollMs);
     };
     void reposLoop().then(() => pollLoop());

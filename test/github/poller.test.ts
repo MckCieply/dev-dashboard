@@ -146,4 +146,69 @@ describe('GitHubPoller', () => {
       expect(calls.length).toBe(n);
     } finally { vi.useRealTimers(); }
   });
+
+  it('goes slow when REST is exhausted even if GraphQL is healthy', async () => {
+    const h = (resource: string, rem: number) => ({ 'x-ratelimit-resource': resource, 'x-ratelimit-remaining': String(rem), 'x-ratelimit-limit': '5000', 'x-ratelimit-reset': '9' });
+    const fetchFn = (async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.endsWith('/graphql')) return new Response(JSON.stringify({ data: load('prs-graphql.json') }), { status: 200, headers: h('graphql', 4900) });
+      if (u.includes('/user/repos')) return new Response(JSON.stringify([rawRepo('acme/app')]), { status: 200, headers: h('core', 300) });
+      if (u.includes('/jobs')) return new Response('{"jobs":[]}', { status: 200, headers: h('core', 300) });
+      if (u.includes('/actions/runners')) return new Response('{"runners":[]}', { status: 200, headers: h('core', 300) });
+      return new Response('{"workflow_runs":[]}', { status: 200, headers: h('core', 300) });
+    }) as typeof fetch;
+    const client = new GitHubClient({ token: 't', fetch: fetchFn });
+    const { store, poller } = mk(client);
+    await poller.refreshRepos();
+    await poller.pollOnce();
+    expect(store.get().rate).toMatchObject({ remaining: 300, slowed: true });
+  });
+
+  it('retries repos after 30s when refresh fails, not reposRefreshMs', async () => {
+    vi.useFakeTimers();
+    try {
+      let failRepos = true;
+      const { client, calls } = fake((p) => p.startsWith('/user/repos') && failRepos ? new GitHubError(500, 'x') : happy(p));
+      const { store, poller } = mk(client);
+      poller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.get().collectors.repos.ok).toBe(false);
+      const n = calls.filter((c) => c.startsWith('/user/repos')).length;
+      failRepos = false;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(calls.filter((c) => c.startsWith('/user/repos')).length).toBe(n + 1);
+      expect(store.get().collectors.repos.ok).toBe(true);
+      poller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('an unexpected throw in a poll does not stop the loop', async () => {
+    vi.useFakeTimers();
+    try {
+      const { client } = fake(happy);
+      const { store, poller } = mk(client);
+      const orig = store.setRate.bind(store);
+      let thrown = 0;
+      store.setRate = (r) => { if (thrown++ === 0) throw new Error('boom'); orig(r); };
+      const logs: string[] = [];
+      (poller as unknown as { log: (m: string) => void }).log = (m) => logs.push(m);
+      poller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(thrown).toBe(1);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(thrown).toBe(2);
+      expect(store.get().rate).not.toBeNull();
+      expect(logs.some((m) => m.includes('boom'))).toBe(true);
+      poller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('tolerates null repo entries in graphql data', async () => {
+    const data = load('prs-graphql.json') as Record<string, unknown>;
+    const { client } = fake((p) => p.startsWith('graphql:') ? { ...data, r1: null } : happy(p));
+    const { store, poller } = mk(client);
+    await poller.refreshRepos();
+    await poller.pollOnce();
+    expect(store.get().collectors.prs.ok).toBe(true);
+  });
 });

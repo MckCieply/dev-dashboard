@@ -72,6 +72,63 @@ describe('GitHubClient', () => {
     expect(JSON.parse(String(calls[1].init.body))).toEqual({ query: 'q' });
     expect(c.lastRate()).toEqual({ remaining: 10, limit: 5000, resetAt: 100_000 });
   });
+
+  it('tracks rate per resource and lastRate returns the lowest remaining', async () => {
+    const h = (resource: string, rem: string) => ({ 'x-ratelimit-resource': resource, 'x-ratelimit-remaining': rem, 'x-ratelimit-limit': '5000', 'x-ratelimit-reset': '100' });
+    const { fn } = fakeFetch([
+      new Response('{}', { status: 200, headers: h('core', '300') }),
+      new Response(JSON.stringify({ data: {} }), { status: 200, headers: h('graphql', '4900') }),
+    ]);
+    const c = new GitHubClient({ token: 't', fetch: fn });
+    await c.rest('/x');
+    await c.graphql('q');
+    expect(c.lastRate()).toEqual({ remaining: 300, limit: 5000, resetAt: 100_000 });
+  });
+
+  it('falls back to core for rest and graphql for graphql when resource header missing', async () => {
+    const h = (rem: string) => ({ 'x-ratelimit-remaining': rem, 'x-ratelimit-limit': '5000', 'x-ratelimit-reset': '100' });
+    const { fn } = fakeFetch([
+      new Response('{}', { status: 200, headers: h('300') }),
+      new Response(JSON.stringify({ data: {} }), { status: 200, headers: h('4900') }),
+    ]);
+    const c = new GitHubClient({ token: 't', fetch: fn });
+    await c.rest('/x');
+    await c.graphql('q');
+    expect(c.lastRate()!.remaining).toBe(300);
+  });
+
+  it('passes an abort signal and a timeout surfaces as an error', async () => {
+    const fn = ((_u: unknown, init?: RequestInit) => new Promise((_res, rej) => {
+      init!.signal!.addEventListener('abort', () => rej(init!.signal!.reason));
+    })) as typeof fetch;
+    const c = new GitHubClient({ token: 't', fetch: fn, timeoutMs: 20 });
+    await expect(c.rest('/x')).rejects.toMatchObject({ name: 'TimeoutError' });
+    await expect(c.graphql('q')).rejects.toMatchObject({ name: 'TimeoutError' });
+  });
+
+  it('graphql with partial errors but data returns data; no data throws', async () => {
+    const { fn } = fakeFetch([
+      new Response(JSON.stringify({ data: { r0: null, r1: { a: 1 } }, errors: [{ message: 'not found' }] }), { status: 200 }),
+      new Response(JSON.stringify({ data: null, errors: [{ message: 'bad' }] }), { status: 200 }),
+    ]);
+    const c = new GitHubClient({ token: 't', fetch: fn });
+    expect(await c.graphql('q')).toEqual({ r0: null, r1: { a: 1 } });
+    await expect(c.graphql('q')).rejects.toThrow('bad');
+  });
+
+  it('bounds the etag cache, evicting the least recently used', async () => {
+    const etagged = (n: string) => new Response('{}', { status: 200, headers: { ETag: `"${n}"` } });
+    const { fn, calls } = fakeFetch([etagged('a'), etagged('b'), new Response(null, { status: 304 }), etagged('c'), etagged('a2'), etagged('b2')]);
+    const c = new GitHubClient({ token: 't', fetch: fn, maxCacheEntries: 2 });
+    await c.rest('/a'); await c.rest('/b');
+    await c.rest('/a'); // hit, refreshes /a
+    await c.rest('/c'); // evicts /b
+    await c.rest('/a');
+    await c.rest('/b');
+    expect(hdr(calls[2].init, 'if-none-match')).toBe('"a"');
+    expect(hdr(calls[4].init, 'if-none-match')).toBe('"a"');
+    expect(hdr(calls[5].init, 'if-none-match')).toBeNull();
+  });
 });
 
 describe('resolveToken', () => {
