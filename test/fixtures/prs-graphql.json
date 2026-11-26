@@ -1,0 +1,8 @@
+{"r0":{"pullRequests":{"nodes":[
+{"id":"PR_1","number":12,"title":"Add \"login\" & <b>","url":"https://github.com/acme/app/pull/12","isDraft":false,"reviewDecision":"APPROVED","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"SUCCESS","contexts":{"totalCount":2,"nodes":[{"__typename":"CheckRun","status":"COMPLETED","conclusion":"SUCCESS"},{"__typename":"StatusContext","state":"SUCCESS"}]}}}}]}},
+{"id":"PR_2","number":13,"title":"Broken build","url":"https://github.com/acme/app/pull/13","isDraft":false,"reviewDecision":"CHANGES_REQUESTED","mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED","commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE","contexts":{"totalCount":3,"nodes":[{"__typename":"CheckRun","status":"COMPLETED","conclusion":"FAILURE"},{"__typename":"CheckRun","status":"COMPLETED","conclusion":"SUCCESS"},{"__typename":"CheckRun","status":"IN_PROGRESS","conclusion":null}]}}}}]}},
+{"id":"PR_3","number":14,"title":"Conflicting","url":"https://github.com/acme/app/pull/14","isDraft":false,"reviewDecision":null,"mergeable":"CONFLICTING","mergeStateStatus":"DIRTY","commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]}},
+{"id":"PR_4","number":15,"title":"WIP","url":"https://github.com/acme/app/pull/15","isDraft":true,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"PENDING","contexts":{"totalCount":1,"nodes":[{"__typename":"CheckRun","status":"QUEUED","conclusion":null}]}}}}]}}
+]}},
+"r1":null,
+"rateLimit":{"remaining":4990,"limit":5000,"resetAt":"2026-11-26T11:00:00Z"}}

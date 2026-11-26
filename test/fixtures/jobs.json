@@ -1,0 +1,4 @@
+{"total_count":2,"jobs":[
+{"id":9001,"run_id":101,"status":"queued","labels":["self-hosted","windows"],"runner_name":null,"started_at":null},
+{"id":9002,"run_id":101,"status":"completed","labels":["ubuntu-latest"],"runner_name":"GitHub Actions 1","started_at":"2026-11-26T10:00:05Z"}
+]}

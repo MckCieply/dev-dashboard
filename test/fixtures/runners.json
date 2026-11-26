@@ -1,0 +1,6 @@
+{"total_count":4,"runners":[
+{"id":1,"name":"win-runner-1","os":"Windows","status":"online","busy":true,"labels":[{"id":1,"name":"self-hosted","type":"read-only"},{"id":2,"name":"Windows","type":"read-only"},{"id":3,"name":"X64","type":"read-only"},{"id":4,"name":"windows","type":"custom"}]},
+{"id":2,"name":"linux-runner-1","os":"Linux","status":"online","busy":false,"labels":[{"id":1,"name":"self-hosted","type":"read-only"},{"id":5,"name":"Linux","type":"read-only"},{"id":6,"name":"ARM64","type":"read-only"}]},
+{"id":3,"name":"old-runner","os":"Linux","status":"offline","busy":false,"labels":[{"id":1,"name":"self-hosted","type":"read-only"},{"id":5,"name":"Linux","type":"read-only"}]},
+{"id":4,"name":"a-runner","os":"macOS","status":"online","busy":false,"labels":[{"id":1,"name":"self-hosted","type":"read-only"},{"id":7,"name":"macOS","type":"read-only"},{"id":8,"name":"ARM","type":"read-only"}]}
+]}
