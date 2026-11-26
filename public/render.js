@@ -2,6 +2,10 @@
 import { ICON } from './icons.js';
 
 const ENT = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function projectTask(s) {
+  return s.task ? `${esc(s.project)} / ${esc(s.task)}` : esc(s.project);
+}
+
 export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ENT[c]);
 }
@@ -74,7 +78,7 @@ export function renderWaiting(state, now) {
   if (list.length === 0) {
     return `<section class="waiting" aria-labelledby="wait-h"><div class="wait-side"><h2 class="m" id="wait-h">Czeka na Ciebie</h2><div class="wait-count" aria-live="polite">00</div></div><div class="wait-rows"><p class="empty">Nic nie czeka</p></div></section>`;
   }
-  const rows = list.map((s) => `<div class="row row-wait">${icon('waiting')}<div><div class="t">${esc(s.project)} / ${esc(s.task)}</div><div class="s">&gt; ${esc(s.detail)}</div></div><span class="tag muted">${WHERE_LABEL[s.where] ?? esc(s.where)}</span><span class="since m">${fmtDuration(now - s.since)}</span></div>`).join('');
+  const rows = list.map((s) => `<div class="row row-wait">${icon('waiting')}<div><div class="t">${projectTask(s)}</div><div class="s">&gt; ${esc(s.detail)}</div></div><span class="tag muted">${WHERE_LABEL[s.where] ?? esc(s.where)}</span><span class="since m">${fmtDuration(now - s.since)}</span></div>`).join('');
   return `<section class="waiting is-alert" aria-labelledby="wait-h"><div class="wait-side"><h2 class="m" id="wait-h">[!] Czeka na Ciebie</h2><div class="wait-count" aria-live="polite">${pad2(list.length)}</div><div class="m wait-max">MAX_WAIT ${esc(fmtDuration(now - list[0].since).toUpperCase())}</div></div><div class="wait-rows">${rows}</div></section>`;
 }
 
@@ -101,7 +105,7 @@ export function renderTiles(state) {
 }
 
 export function renderSessions(state, now) {
-  const rows = state.sessions.map((s) => `<div class="row">${icon(s.state)}<div><div class="t">${esc(s.project)} / ${esc(s.task)}</div><div class="s">${esc(s.where)} · ${esc(s.detail)} · ${fmtDuration(now - s.since)}</div></div><span class="tag">${SESSION_LABEL[s.state] ?? esc(s.state)}</span></div>`).join('');
+  const rows = state.sessions.map((s) => `<div class="row">${icon(s.state)}<div><div class="t">${projectTask(s)}</div><div class="s">${esc(s.where)} · ${esc(s.detail)} · ${fmtDuration(now - s.since)}</div></div><span class="tag">${SESSION_LABEL[s.state] ?? esc(s.state)}</span></div>`).join('');
   return panel('ses-h', 'Sesje', 'LOCAL + CLOUD', collectorError(state.collectors.sessions, 'Sesje') + (rows || empty('Brak sesji')), !state.collectors.sessions.ok && rows !== '');
 }
 

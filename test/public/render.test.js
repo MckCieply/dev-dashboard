@@ -286,3 +286,12 @@ describe('renderFooter', () => {
     expect(renderFooter(state({ rate: null }))).not.toContain('Limit GitHub');
   });
 });
+
+describe('session without task', () => {
+  it('shows only the project name, no dangling separator', () => {
+    const s = state({ sessions: [sess({ task: '', state: 'waiting', detail: 'nowa sesja' })] });
+    const html = renderSessions(s, NOW) + renderWaiting(s, NOW);
+    expect(html).toContain('>proj<');
+    expect(html).not.toContain('proj / ');
+  });
+});

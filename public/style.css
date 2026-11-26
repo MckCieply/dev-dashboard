@@ -45,7 +45,8 @@ body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var
 .tag.muted { color: var(--ink-muted); }
 .empty { margin: 0; padding: 14px; font-size: 12px; color: var(--ink-muted); }
 .err { margin: 0; padding: 8px 14px; font-size: 12px; line-height: 1.4; color: var(--alert); border-bottom: 1px solid var(--grid-soft); }
-.is-stale .row, .is-stale .pr { opacity: 0.55; }
+/* Stale data: mute text instead of opacity, so contrast stays >= 4.5:1 (ink-muted 7.04:1). */
+.is-stale .row, .is-stale .row *, .is-stale .pr, .is-stale .pr * { color: var(--ink-muted); }
 .foot { margin: 0; font-size: 12px; color: var(--ink-muted); }
 
 /* waiting block */
