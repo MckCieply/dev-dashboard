@@ -51,7 +51,7 @@ Remove the hooks with `npm run uninstall-hooks`.
 | `SessionStart` | waiting | nowa sesja (no toast) |
 | `UserPromptSubmit` | working | myśli |
 | `PreToolUse` | working | tool name |
-| `PostToolUse` | working | unchanged |
+| `PostToolUse` | working | tool name |
 | `PermissionRequest` | waiting | prośba o zgodę: tool |
 | `Notification` (permission prompt) | waiting | prośba o zgodę: tool |
 | `Notification` (idle) | waiting | czeka na odpowiedź |
@@ -76,7 +76,8 @@ Session id is `session_id`, project is the last segment of `cwd`, task is the fi
 - `Port 4317 zajęty — czy dashboard już działa?`: another instance is running; stop it or set `DEV_DASHBOARD_PORT`.
 - GitHub panels say `brak tokenu GitHub`: run `gh auth login` or set `GITHUB_TOKEN`.
 - Footer shows a rate-limit note: fewer than 500 requests left, polling slows to every 120 s until the reset.
-- No toasts: check `DEV_DASHBOARD_TOASTS` and Windows Focus assist / notification settings.
+- No toasts: check `DEV_DASHBOARD_TOASTS`. On Windows also check Settings > System > Notifications for an entry named "SnoreToast" (it must be on) and that Focus Assist / Do Not Disturb is off.
+- `403 forbidden host/origin` or `415`: the server only answers requests whose `Host` is `127.0.0.1`, `localhost` or `[::1]` on its own port, rejects POSTs with a foreign `Origin`, and `/hook` needs `Content-Type: application/json`.
 
 ## Manual 5-minute checklist (Windows)
 

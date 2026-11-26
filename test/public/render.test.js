@@ -193,6 +193,21 @@ describe('empty states', () => {
   });
 });
 
+describe('stale data', () => {
+  const bad = { ok: false, lastSuccessAt: NOW - MIN, error: 'błąd 500' };
+  it('marks a panel is-stale when collector failed but rows exist', () => {
+    const r = { id: 1, name: 'r1', os: 'Linux', labels: [], state: 'idle', job: null };
+    const html = renderRunners(state({ runners: [r], collectors: { ...state().collectors, runners: bad } }), NOW);
+    expect(html).toContain('is-stale');
+    expect(html).toContain('r1');
+  });
+  it('no is-stale when healthy or when no rows', () => {
+    const r = { id: 1, name: 'r1', os: 'Linux', labels: [], state: 'idle', job: null };
+    expect(renderRunners(state({ runners: [r] }), NOW)).not.toContain('is-stale');
+    expect(renderRunners(state({ collectors: { ...state().collectors, runners: bad } }), NOW)).not.toContain('is-stale');
+  });
+});
+
 describe('collectorError', () => {
   it('with data time', () => {
     const html = collectorError({ ok: false, lastSuccessAt: NOW, error: 'błąd 401' }, 'GitHub');

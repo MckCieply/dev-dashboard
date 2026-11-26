@@ -51,8 +51,8 @@ export function collectorError(status, label) {
   return `<p class="err">${esc(label)}: ${esc(status.error)}, ${tail}</p>`;
 }
 
-function panel(id, title, sub, inner) {
-  return `<section class="cell" aria-labelledby="${id}"><h2 class="head" id="${id}">// ${esc(title)} <small>${esc(sub)}</small></h2>${inner}</section>`;
+function panel(id, title, sub, inner, stale = false) {
+  return `<section class="cell${stale ? ' is-stale' : ''}" aria-labelledby="${id}"><h2 class="head" id="${id}">// ${esc(title)} <small>${esc(sub)}</small></h2>${inner}</section>`;
 }
 
 const empty = (text) => `<p class="empty">${esc(text)}</p>`;
@@ -102,7 +102,7 @@ export function renderTiles(state) {
 
 export function renderSessions(state, now) {
   const rows = state.sessions.map((s) => `<div class="row">${icon(s.state)}<div><div class="t">${esc(s.project)} / ${esc(s.task)}</div><div class="s">${esc(s.where)} · ${esc(s.detail)} · ${fmtDuration(now - s.since)}</div></div><span class="tag">${SESSION_LABEL[s.state] ?? esc(s.state)}</span></div>`).join('');
-  return panel('ses-h', 'Sesje', 'LOCAL + CLOUD', collectorError(state.collectors.sessions, 'Sesje') + (rows || empty('Brak sesji')));
+  return panel('ses-h', 'Sesje', 'LOCAL + CLOUD', collectorError(state.collectors.sessions, 'Sesje') + (rows || empty('Brak sesji')), !state.collectors.sessions.ok && rows !== '');
 }
 
 function runnerDetail(r, now) {
@@ -114,7 +114,7 @@ function runnerDetail(r, now) {
 
 export function renderRunners(state, now) {
   const rows = state.runners.map((r) => `<div class="row">${icon(r.state)}<div><div class="t">${esc(r.name)}</div><div class="s">${esc(r.os)} · ${runnerDetail(r, now)}</div></div><span class="tag">${RUNNER_LABEL[r.state] ?? esc(r.state)}</span></div>`).join('');
-  return panel('run-h', 'Runnery', 'ALL INCL. OFFLINE', collectorError(state.collectors.runners, 'Runnery') + (rows || empty('Brak runnerów')));
+  return panel('run-h', 'Runnery', 'ALL INCL. OFFLINE', collectorError(state.collectors.runners, 'Runnery') + (rows || empty('Brak runnerów')), !state.collectors.runners.ok && rows !== '');
 }
 
 function queueDetail(q, now) {
@@ -124,7 +124,7 @@ function queueDetail(q, now) {
 
 export function renderQueue(state, now) {
   const rows = state.queue.map((q) => `<div class="row">${icon(RUN_ICON[q.state] ?? 'queued')}<div><div class="t">${esc(q.repo)} / ${esc(q.workflow)} #${esc(q.runNumber)}</div><div class="s">${esc(q.branch)} · ${queueDetail(q, now)}</div></div><span class="tag">${RUN_LABEL[q.state] ?? esc(q.state)}</span></div>`).join('');
-  return panel('q-h', 'Kolejka runów', 'ACTIVE REPOS', collectorError(state.collectors.queue, 'Kolejka') + (rows || empty('Kolejka pusta')));
+  return panel('q-h', 'Kolejka runów', 'ACTIVE REPOS', collectorError(state.collectors.queue, 'Kolejka') + (rows || empty('Kolejka pusta')), !state.collectors.queue.ok && rows !== '');
 }
 
 function checksView(c) {
@@ -156,7 +156,7 @@ export function renderPrs(state) {
     const head = href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${title}</a>` : title;
     return `<div class="pr"><div class="pr-top"><div class="t">${head}</div><span class="tag">${MERGE_LABEL[p.merge] ?? '[?]'}</span></div><div class="s pr-meta"><span>${icon(ck, 14, 2.6)}${ct}</span><span>${icon(rk, 14, 2.6)}${rt}</span></div></div>`;
   }).join('');
-  return panel('pr-h', 'Pull requesty', 'OPEN', collectorError(state.collectors.prs, 'PR') + (rows || empty('Brak otwartych PR')));
+  return panel('pr-h', 'Pull requesty', 'OPEN', collectorError(state.collectors.prs, 'PR') + (rows || empty('Brak otwartych PR')), !state.collectors.prs.ok && rows !== '');
 }
 
 export function renderFooter(state) {

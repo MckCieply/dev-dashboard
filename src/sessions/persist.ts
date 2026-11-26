@@ -1,6 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Session } from '../types.js';
 import type { Sessions } from './machine.js';
+
+const STATES = new Set(['waiting', 'working', 'unknown']);
+
+function validSession(e: unknown): e is Session {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return false;
+  const o = e as Record<string, unknown>;
+  return typeof o.id === 'string' && typeof o.state === 'string' && STATES.has(o.state)
+    && typeof o.since === 'number' && Number.isFinite(o.since)
+    && typeof o.lastEventAt === 'number' && Number.isFinite(o.lastEventAt);
+}
 
 export function loadSessions(file: string): Sessions {
   let raw: string;
@@ -11,7 +22,11 @@ export function loadSessions(file: string): Sessions {
   }
   try {
     const v: unknown = JSON.parse(raw);
-    if (v && typeof v === 'object' && !Array.isArray(v)) return v as Sessions;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const out: Sessions = {};
+      for (const [k, e] of Object.entries(v as Record<string, unknown>)) if (validSession(e)) out[k] = e;
+      return out;
+    }
     throw new Error('not an object');
   } catch (e) {
     process.stderr.write(`dev-dashboard: ignoring corrupt ${file}: ${(e as Error).message}\n`);

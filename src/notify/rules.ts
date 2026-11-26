@@ -8,13 +8,14 @@ export function createAlertEngine(): { evaluate(next: DashboardState, prev: Dash
   const streak = new Map<number, number>();
   const alertedOffline = new Set<number>();
   let baselined = false;
-  let lastKeys = new Set<string>();
+  let evaluated = false;
 
   function sessionAlerts(next: DashboardState, prev: DashboardState, out: Alert[]): void {
     const before = new Map(prev.sessions.map((s) => [s.id, s]));
     for (const s of next.sessions) {
       const p = before.get(s.id);
-      if (!p || p.state === 'waiting' || s.state !== 'waiting') continue;
+      if (s.state !== 'waiting') continue;
+      if (p ? p.state === 'waiting' : (!evaluated || s.detail === 'nowa sesja')) continue;
       out.push({
         key: `session:${s.id}:waiting:${s.since}`,
         title: `Czeka: ${s.project}`,
@@ -73,9 +74,9 @@ export function createAlertEngine(): { evaluate(next: DashboardState, prev: Dash
       sessionAlerts(next, prev, all);
       runnerAlerts(next, prev, all);
       prAlerts(next, prev, all);
-      const out = all.filter((a) => !lastKeys.has(a.key));
-      if (all.length > 0) lastKeys = new Set(all.map((a) => a.key));
-      return out;
+      evaluated = true;
+      const seen = new Set<string>();
+      return all.filter((a) => !seen.has(a.key) && seen.add(a.key));
     },
   };
 }

@@ -55,8 +55,16 @@ export function createServer(opts: { store: Store; publicDir: string; fontsDir: 
   const publicDir = path.resolve(opts.publicDir);
   const fontsRoot = path.resolve(opts.fontsDir, '@fontsource');
 
-  return http.createServer((req, res) => {
+  const server: http.Server = http.createServer((req, res) => {
     const method = req.method ?? 'GET';
+    // DNS-rebinding / CSRF guard: only answer for our own loopback origin.
+    const port = (server.address() as { port: number } | null)?.port;
+    const hosts = [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`];
+    if (port === undefined || !hosts.includes(req.headers.host ?? '')) return send(res, 403, 'forbidden host');
+    const origin = req.headers.origin;
+    if (method === 'POST' && origin !== undefined && !hosts.some((h) => origin === `http://${h}`)) {
+      return send(res, 403, 'forbidden origin');
+    }
     let pathname: string;
     try {
       pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);
@@ -68,6 +76,7 @@ export function createServer(opts: { store: Store; publicDir: string; fontsDir: 
     if (pathname.split(/[\\/]/).includes('..') || rawPath.split('/').includes('..')) return send(res, 404, 'not found');
 
     if (method === 'POST' && pathname === '/hook') {
+      if (!/^application\/json(\s*;|$)/i.test((req.headers['content-type'] ?? '').trim())) return send(res, 415, 'content-type must be application/json');
       readBody(req).then((body) => {
         if (body === 'too-large') return send(res, 413, 'payload too large');
         let ev: unknown;
@@ -110,4 +119,5 @@ export function createServer(opts: { store: Store; publicDir: string; fontsDir: 
 
     return serveFile(res, publicDir, pathname.replace(/^\/+/, ''));
   });
+  return server;
 }

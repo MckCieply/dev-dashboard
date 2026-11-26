@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { EVENTS, hookCommand, addHooks, removeHooks } from '../../scripts/install-hooks.mjs';
+import { EVENTS, hookCommand, addHooks, removeHooks, diffSettings } from '../../scripts/install-hooks.mjs';
 
 const P = '/x/dev-dashboard/hooks/report.mjs';
 const CLI = path.resolve('scripts/install-hooks.mjs');
@@ -52,6 +52,27 @@ describe('install-hooks', () => {
     const u = spawnSync(process.execPath, [CLI, '--settings', f, '--yes', '--uninstall'], { encoding: 'utf8' });
     expect(u.status).toBe(0);
     expect(JSON.parse(fs.readFileSync(f, 'utf8'))).toEqual({ model: 'x' });
+  });
+
+  it('diffSettings marks added lines with + and removed with -', () => {
+    const d = diffSettings({ model: 'x' }, addHooks({ model: 'x' }, P));
+    expect(d).toMatch(/^\+ +"command": "node .*report\.mjs.*",$/m);
+    expect(d).not.toMatch(/^- +"command"/m);
+    expect(diffSettings({ a: 1 }, { a: 1 })).toBe('');
+    const r = diffSettings(addHooks({}, P), {});
+    expect(r).toMatch(/^-/m);
+  });
+
+  it('CLI prints the diff before asking, and for uninstall', () => {
+    const f = path.join(tmp(), 'settings.json');
+    fs.writeFileSync(f, JSON.stringify({ model: 'x' }));
+    const r = spawnSync(process.execPath, [CLI, '--settings', f], { encoding: 'utf8', input: 'n\n' });
+    expect(r.stdout).toMatch(/^\+ .*report\.mjs/m);
+    expect(r.stdout.indexOf('report.mjs')).toBeLessThan(r.stdout.indexOf('Apply?'));
+    expect(fs.readFileSync(f, 'utf8')).toBe('{"model":"x"}');
+    spawnSync(process.execPath, [CLI, '--settings', f, '--yes'], { encoding: 'utf8' });
+    const u = spawnSync(process.execPath, [CLI, '--settings', f, '--uninstall'], { encoding: 'utf8', input: 'n\n' });
+    expect(u.stdout).toMatch(/^- .*report\.mjs/m);
   });
 
   it('CLI exits 1 on invalid JSON and leaves the file unchanged', () => {

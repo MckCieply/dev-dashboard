@@ -13,7 +13,12 @@ describe('createToaster', () => {
     const notify = vi.fn();
     createToaster({ enabled: () => true, notify })(alerts);
     expect(notify).toHaveBeenCalledTimes(2);
-    expect(notify).toHaveBeenCalledWith({ title: 'T1', message: 'M1', sound: true, appID: 'dev-dashboard', wait: false });
+    expect(notify).toHaveBeenCalledWith({ title: 'T1', message: 'M1', sound: true, wait: false });
+  });
+  it('does not pass an unregistered appID', () => {
+    const notify = vi.fn();
+    createToaster({ enabled: () => true, notify })(alerts);
+    expect(notify.mock.calls[0][0]).not.toHaveProperty('appID');
   });
   it('catches notify errors and logs', () => {
     const log = vi.fn();

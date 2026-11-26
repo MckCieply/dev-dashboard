@@ -41,8 +41,23 @@ describe('sessions', () => {
     const w = sess({ state: 'waiting' });
     expect(createAlertEngine().evaluate(st({ sessions: [{ ...w, detail: 'x' }] }), st({ sessions: [w] }))).toEqual([]);
   });
-  it('no alert for new waiting session', () => {
+  it('no alert for a waiting session at the baseline evaluation', () => {
     expect(createAlertEngine().evaluate(st({ sessions: [sess({ state: 'waiting' })] }), st())).toEqual([]);
+  });
+  it('alerts a session first seen already waiting (after baseline), not for "nowa sesja"', () => {
+    const e = createAlertEngine();
+    e.evaluate(st(), st());
+    const a = e.evaluate(st({ sessions: [sess({ state: 'waiting', detail: 'prośba o zgodę: Bash' })] }), st());
+    expect(a).toHaveLength(1);
+    expect(a[0].title).toBe('Czeka: proj');
+    const b = e.evaluate(st({ sessions: [sess({ id: 's9', state: 'waiting', detail: 'nowa sesja' })] }), st());
+    expect(b).toEqual([]);
+  });
+  it('restored waiting session (present in prev) does not alert', () => {
+    const e = createAlertEngine();
+    const w = sess({ state: 'waiting', detail: 'odpowiedź gotowa' });
+    e.evaluate(st({ sessions: [w] }), st({ sessions: [w] }));
+    expect(e.evaluate(st({ sessions: [w], prs: [pr()] }), st({ sessions: [w] }))).toEqual([]);
   });
   it('no alert working -> unknown (also a sweep of many)', () => {
     const prev = st({ sessions: [sess(), sess({ id: 's2' }), sess({ id: 's3' })] });
@@ -124,7 +139,20 @@ describe('prs', () => {
     expect(a).toHaveLength(1);
     expect(a[0].title).toBe('Checki nie przeszły: o/r #7');
     expect(a[0].message).toBe('Fix');
-    expect(e.evaluate(st({ prs: [failing] }), st({ prs: [pr()] }))).toEqual([]); // same key in a row
+  });
+  it('repeated fail -> pass -> fail alerts twice', () => {
+    const e = createAlertEngine();
+    const pass = pr({ checks: { state: 'pass', passed: 1, failed: 0, total: 1 } });
+    expect(e.evaluate(st({ prs: [failing] }), st({ prs: [pr()] }))).toHaveLength(1);
+    expect(e.evaluate(st({ prs: [pass] }), st({ prs: [failing] }))).toEqual([]);
+    expect(e.evaluate(st({ prs: [failing] }), st({ prs: [pass] }))).toHaveLength(1);
+  });
+  it('repeated ready -> blocked -> ready alerts twice', () => {
+    const e = createAlertEngine();
+    const ready = pr({ merge: 'ready' });
+    expect(e.evaluate(st({ prs: [ready] }), st({ prs: [pr()] }))).toHaveLength(1);
+    expect(e.evaluate(st({ prs: [pr()] }), st({ prs: [ready] }))).toEqual([]);
+    expect(e.evaluate(st({ prs: [ready] }), st({ prs: [pr()] }))).toHaveLength(1);
   });
   it('alerts merge -> ready', () => {
     const a = createAlertEngine().evaluate(st({ prs: [pr({ merge: 'ready' })] }), st({ prs: [pr()] }));

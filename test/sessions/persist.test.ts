@@ -34,6 +34,20 @@ describe('persist', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  it('drops invalid entries and non-object roots on load', () => {
+    const file = path.join(tmp(), 's.json');
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    fs.writeFileSync(file, JSON.stringify({
+      a: null, good: sess.a, noId: { ...sess.a, id: 5 }, badState: { ...sess.a, state: 'zzz' },
+      badSince: { ...sess.a, since: 'x' }, nanLast: { ...sess.a, lastEventAt: null }, str: 'x', arr: [1],
+    }));
+    expect(loadSessions(file)).toEqual({ good: sess.a });
+    fs.writeFileSync(file, '[1,2]');
+    expect(loadSessions(file)).toEqual({});
+    fs.writeFileSync(file, 'null');
+    expect(loadSessions(file)).toEqual({});
+  });
+
   it('debounces saves', () => {
     vi.useFakeTimers();
     const file = path.join(tmp(), 's.json');

@@ -47,6 +47,26 @@ export function addHooks(settings, reportPath) {
   return out;
 }
 
+// Line diff of two settings objects: "- " removed, "+ " added, unchanged lines omitted.
+export function diffSettings(before, after) {
+  const a = JSON.stringify(before ?? {}, null, 2).split('\n');
+  const b = JSON.stringify(after ?? {}, null, 2).split('\n');
+  const lcs = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0; let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { i++; j++; }
+    else if (j < b.length && (i === a.length || lcs[i][j + 1] >= lcs[i + 1][j])) out.push(`+ ${b[j++]}`);
+    else out.push(`- ${a[i++]}`);
+  }
+  return out.join('\n');
+}
+
 async function main(argv) {
   const arg = (name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
   const settingsPath = arg('--settings') ?? path.join(os.homedir(), '.claude', 'settings.json');
@@ -61,6 +81,9 @@ async function main(argv) {
   const next = uninstall ? removeHooks(settings, reportPath) : addHooks(settings, reportPath);
   console.log(`${uninstall ? 'Remove' : 'Add'} hooks for: ${EVENTS.join(', ')}`);
   console.log(`Settings: ${settingsPath}\nReport script: ${reportPath}`);
+
+  const diff = diffSettings(settings, next);
+  console.log(diff ? `\nChanges:\n${diff}\n` : '\nNo changes.\n');
 
   if (!argv.includes('--yes')) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
