@@ -77,7 +77,7 @@ describe('http', () => {
   });
 
   it('path traversal -> 404', async () => {
-    for (const p of ['/../secret.json', '/%2e%2e/secret.json', '/fonts/inter/..%2f..%2f..%2f..%2fsecret.json', '/fonts/inter/../../../secret.json']) {
+    for (const p of ['/../secret.json', '/..%2fsecret.json', '/%2e%2e%2fsecret.json', '/%2e%2e/secret.json', '/fonts/inter/..%2f..%2f..%2f..%2fsecret.json', '/fonts/inter/../../../secret.json']) {
       const r = await fetch(base + p);
       expect(r.status, p).toBe(404);
     }
